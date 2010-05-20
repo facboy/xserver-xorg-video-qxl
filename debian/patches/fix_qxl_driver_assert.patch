@@ -1,0 +1,19 @@
+From: Dave Airlie <airlied@redhat.com>
+Description: qxl: remove asserts that make no sense anymore
+
+ * src/qxl_driver.c: remove asserts.
+
+Origin: upstream, http://cgit.freedesktop.org/xorg/driver/xf86-video-qxl/commit/?id=563f31ad081038ece8b5a5b525dd516fcd6ad0fd
+
+--- a/src/qxl_driver.c
++++ b/src/qxl_driver.c
+@@ -1200,9 +1200,6 @@
+ 
+     p->Private = (void *)(unsigned long)mode_idx;
+ 
+-    assert (((struct qxl_mode *)p->Private)->x_res == p->HDisplay);
+-    assert (((struct qxl_mode *)p->Private)->y_res == p->VDisplay);
+-    
+     return MODE_OK;
+ }
+ 
