@@ -1,0 +1,37 @@
+Source: xserver-xorg-video-qxl
+Section: x11
+Priority: optional
+Maintainer: Debian X Strike Force <debian-x@lists.debian.org>
+Uploaders: Liang Guo <bluestonechina@gmail.com>
+Build-Depends:
+ debhelper (>= 7.0.50),
+ pkg-config,
+ xserver-xorg-dev (>= 1.7.6.901),
+ x11proto-core-dev,
+ x11proto-fonts-dev,
+ x11proto-randr-dev,
+ x11proto-render-dev,
+ x11proto-xext-dev,
+ x11proto-xinerama-dev,
+ x11proto-xf86dga-dev,
+ dpkg-dev (>= 1.14.17),
+ automake,
+ libtool,
+ xutils-dev (>= 1:7.5),
+Standards-Version: 3.8.4
+Vcs-Git: git://git.debian.org/git/pkg-xorg/driver/xserver-xorg-video-qxl
+Vcs-Browser: http://git.debian.org/?p=pkg-xorg/driver/xserver-xorg-video-qxl.git
+
+Package: xserver-xorg-video-qxl
+Architecture: any
+Depends: ${shlibs:Depends}, ${misc:Depends}, ${xviddriver:Depends}
+Provides: ${xviddriver:Provides}
+Description: X.Org X server -- QXL display driver
+ This package provides the driver for QXL video device, i.e. if Linux is 
+ running inside a RedHat Enterprise Virtulization(RHEV) environment, or
+ other SPICE-compatible KVM/Qemu emulator. 
+ .
+ More information about X.Org can be found at:
+ <URL:http://www.X.org>
+ .
+ This package is built from the X.org xf86-video-qxl driver module.

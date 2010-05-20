@@ -1,0 +1,5 @@
+xserver-xorg-video-qxl (0.0.12-1) unstable; urgency=low
+
+  * Initial release (Closes: #576642)  
+
+ -- Liang Guo <bluestonechina@gmail.com>  Thu, 20 May 2010 16:44:11 +0800
