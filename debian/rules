@@ -64,12 +64,12 @@ clean: xsfclean
 	rm -f compile config.guess config.sub configure depcomp install-sh
 	rm -f ltmain.sh missing INSTALL aclocal.m4 config.h.in mkinstalldirs
 
-	dh_clean
+	dh_prep
 
 install: build
 	dh_testdir
 	dh_testroot
-	dh_clean -k
+	dh_prep
 	dh_installdirs
 
 	cd build && $(MAKE) DESTDIR=$(CURDIR)/debian/tmp install
