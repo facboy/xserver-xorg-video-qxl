@@ -19,7 +19,7 @@ Build-Depends:
  automake,
  libtool,
  xutils-dev (>= 1:7.5),
-Standards-Version: 3.8.4
+Standards-Version: 3.9.1
 Vcs-Git: git://git.debian.org/git/pkg-xorg/driver/xserver-xorg-video-qxl
 Vcs-Browser: http://git.debian.org/?p=pkg-xorg/driver/xserver-xorg-video-qxl.git
 
