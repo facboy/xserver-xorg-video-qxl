@@ -6,6 +6,7 @@ Uploaders: Liang Guo <bluestonechina@gmail.com>
 Build-Depends:
  debhelper (>= 8),
  pkg-config,
+ dh-autoreconf,
  xserver-xorg-dev (>= 2:1.9.4),
  x11proto-core-dev,
  x11proto-fonts-dev,

@@ -2,6 +2,9 @@ xserver-xorg-video-qxl (0.0.13-1) unstable; urgency=low
 
   * New upstream version.
   * Remove xsfbs accordingly.
+  * Switch to dh:
+    - Use debhelper 8.
+    - Use dh-autoreconf.
 
  -- Liang Guo <bluestonechina@gmail.com>  Sun, 13 Feb 2011 17:03:55 +0800
 
