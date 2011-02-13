@@ -39,6 +39,8 @@
 #include "pciaccess.h"
 #endif
 #include "fb.h"
+#include "uxa/uxa.h"
+#include "vgaHW.h"
 
 #define hidden _X_HIDDEN
 
@@ -47,6 +49,7 @@
 #define PCI_VENDOR_RED_HAT	0x1b36
 
 #define PCI_CHIP_QXL_0100	0x0100
+#define PCI_CHIP_QXL_01FF	0x01ff
 
 #pragma pack(push,1)
 
@@ -58,8 +61,19 @@ enum {
     QXL_IO_UPDATE_IRQ,
     QXL_IO_NOTIFY_OOM,
     QXL_IO_RESET,
-    QXL_IO_SET_MODE,
+    QXL_IO_SET_MODE,			/* qxl 1 */
     QXL_IO_LOG,
+    /* Appended in qxl 2 */
+    QXL_IO_MEMSLOT_ADD,
+    QXL_IO_MEMSLOT_DEL,
+    QXL_IO_DETACH_PRIMARY,
+    QXL_IO_ATTACH_PRIMARY,
+    QXL_IO_CREATE_PRIMARY,
+    QXL_IO_DESTROY_PRIMARY,
+    QXL_IO_DESTROY_SURFACE_WAIT,
+    QXL_IO_DESTROY_ALL_SURFACES,
+
+    QXL_IO_RANGE_SIZE
 };
 
 struct qxl_mode {
@@ -79,13 +93,20 @@ typedef enum
     QXL_CMD_DRAW,
     QXL_CMD_UPDATE,
     QXL_CMD_CURSOR,
-    QXL_CMD_MESSAGE
+    QXL_CMD_MESSAGE,
+    QXL_CMD_SURFACE
 } qxl_command_type;
 
 struct qxl_command {
     uint64_t data;
     uint32_t type;
     uint32_t pad;
+};
+
+struct qxl_command_ext {
+    struct qxl_command	cmd;
+    uint32_t		group_id;
+    uint32_t		flags;
 };
 
 struct qxl_rect {
@@ -98,6 +119,11 @@ struct qxl_rect {
 union qxl_release_info {
     uint64_t id;
     uint64_t next;
+};
+
+struct qxl_release_info_ext {
+    union qxl_release_info *	info;
+    uint32_t			group_id;
 };
 
 struct qxl_clip {
@@ -144,6 +170,10 @@ typedef enum {
     QXL_IMAGE_TYPE_LZ_RGB,
     QXL_IMAGE_TYPE_GLZ_RGB,
     QXL_IMAGE_TYPE_FROM_CACHE,
+    QXL_IMAGE_TYPE_SURFACE,
+    QXL_IMAGE_TYPE_JPEG,
+    QXL_IMAGE_TYPE_FROM_CACHE_LOSSLESS,
+    QXL_IMAGE_TYPE_JPEG_ALPHA
 } qxl_image_type;
 
 typedef enum {
@@ -186,6 +216,18 @@ typedef enum {
     QXL_BITMAP_TOP_DOWN = (1 << 2),
 } qxl_bitmap_flags;
 
+typedef enum {
+    QXL_SURFACE_FMT_INVALID,
+    QXL_SURFACE_FMT_1_A,
+    QXL_SURFACE_FMT_8_A = 8,
+    QXL_SURFACE_FMT_16_555 = 16,
+    QXL_SURFACE_FMT_32_xRGB = 32,
+    QXL_SURFACE_FMT_16_565 = 80,
+    QXL_SURFACE_FMT_32_ARGB = 96,
+
+    SPICE_SURFACE_FMT_ENUM_END
+} qxl_surface_fmt;
+
 struct qxl_bitmap {
     uint8_t format;
     uint8_t flags;		
@@ -201,6 +243,7 @@ struct qxl_image {
     union
     {
 	struct qxl_bitmap bitmap;
+        uint32_t surface_id;
     } u;
 };
 
@@ -337,36 +380,100 @@ typedef enum {
     QXL_DRAW_ALPHA_BLEND,
 } qxl_draw_type;
 
-struct qxl_drawable {
-    union qxl_release_info release_info;
-    unsigned char effect;
-    unsigned char type;
-    unsigned short bitmap_offset;
-    struct qxl_rect bitmap_area;
-    struct qxl_rect bbox;
-    struct qxl_clip clip;
-    uint32_t mm_time;
+/* QXL 1 */
+struct qxl_compat_drawable {
+    union qxl_release_info	release_info;
+    uint8_t			effect;
+    uint8_t			type;
+    uint8_t			self_bitmap;
+    struct qxl_rect		bitmap_area;
+    struct qxl_rect		bbox;
+    struct qxl_clip		clip;
+    uint32_t			mm_time;
     union {
-	struct qxl_fill fill;
-	struct qxl_opaque opaque;
-	struct qxl_copy copy;
-	struct qxl_transparent transparent;
-	struct qxl_alpha_blend alpha_blend;
-	struct qxl_copy_bits copy_bits;
-	struct qxl_blend blend;
-	struct qxl_rop3 rop3;
-	struct qxl_stroke stroke;
-	struct qxl_text text;
-	struct qxl_blackness blackness;
-	struct qxl_inverse inverse;
-	struct qxl_whiteness whiteness;
+	struct qxl_fill		fill;
+	struct qxl_opaque	opaque;
+	struct qxl_copy		copy;
+	struct qxl_transparent	transparent;
+	struct qxl_alpha_blend	alpha_blend;
+	struct qxl_copy_bits	copy_bits;
+	struct qxl_blend	blend;
+	struct qxl_rop3		rop3;
+	struct qxl_stroke	stroke;
+	struct qxl_text		text;
+	struct qxl_blackness	blackness;
+	struct qxl_inverse	inverse;
+	struct qxl_whiteness	whiteness;
     } u;
 };
 
-struct qxl_update_cmd {
+/* QXL 2 */
+struct qxl_drawable {
+    union qxl_release_info	release_info;
+    uint32_t			surface_id;
+    uint8_t			effect;
+    uint8_t			type;
+    uint8_t			self_bitmap;
+    struct qxl_rect		self_bitmap_area;
+    struct qxl_rect		bbox;
+    struct qxl_clip		clip;
+    uint32_t			mm_time;
+    int32_t			surfaces_dest[3];
+    struct qxl_rect		surfaces_rects[3];
+    union {
+	struct qxl_fill		fill;
+	struct qxl_opaque	opaque;
+	struct qxl_copy		copy;
+	struct qxl_transparent	transparent;
+	struct qxl_alpha_blend	alpha_blend;
+	struct qxl_copy_bits	copy_bits;
+	struct qxl_blend	blend;
+	struct qxl_rop3		rop3;
+	struct qxl_stroke	stroke;
+	struct qxl_text		text;
+	struct qxl_blackness	blackness;
+	struct qxl_inverse	inverse;
+	struct qxl_whiteness	whiteness;
+    } u;
+};
+
+typedef enum {
+    QXL_SURFACE_CMD_CREATE,
+    QXL_SURFACE_CMD_DESTROY
+}  qxl_surface_cmd_type;
+
+struct qxl_surface_info
+{
+    uint32_t format;
+    uint32_t width;
+    uint32_t height;
+    int32_t stride;
+    uint64_t physical;
+};
+
+struct qxl_surface_cmd {
+    union qxl_release_info release_info;
+    uint32_t surface_id;
+    uint8_t type;
+    uint32_t flags;
+    union
+    {
+	struct qxl_surface_info surface_create;
+    } u;
+};
+    
+
+struct qxl_compat_update_cmd {
     union qxl_release_info release_info;
     struct qxl_rect area;
     uint32_t update_id;
+};
+
+struct qxl_update_cmd {
+    union qxl_release_info	release_info;
+    struct qxl_rect		area;
+    uint32_t			update_id;
+    uint32_t			surface_id;
 };
 
 struct qxl_point16 {
@@ -433,14 +540,23 @@ struct qxl_rom {
     uint32_t update_id;
     uint32_t compression_level;
     uint32_t log_level;
-    uint32_t mode;
+    uint32_t mode;			/* qxl 1 */
     uint32_t modes_offset;
-    uint32_t num_io_pages;
-    uint32_t pages_offset;
-    uint32_t draw_area_offset;
-    uint32_t draw_area_size;
+    uint32_t num_pages;
+    uint32_t pages_offset;		/* qxl 1 */
+    uint32_t draw_area_offset;		/* qxl 1 */
+    uint32_t surface0_area_size;	/* qxl 1 name: draw_area_size */
     uint32_t ram_header_offset;
     uint32_t mm_clock;
+    /* Appended for qxl-2 */
+    uint32_t n_surfaces;
+    uint64_t flags;
+    uint8_t  slots_start;
+    uint8_t  slots_end;
+    uint8_t  slot_gen_bits;
+    uint8_t  slot_id_bits;
+    uint8_t  slot_generation;
+    uint8_t padding[3];
 };
 
 struct qxl_ring_header {
@@ -451,32 +567,66 @@ struct qxl_ring_header {
     uint32_t notify_on_cons;
 };
 
+#define QXL_SURF_TYPE_PRIMARY 0
+
+struct qxl_surface_create {
+    uint32_t	width;
+    uint32_t	height;
+    int32_t	stride;
+    uint32_t	depth;
+    uint32_t	position;
+    uint32_t	mouse_mode;
+    uint32_t	flags;
+    uint32_t	type;
+    uint64_t	mem;
+};
+
 #define QXL_LOG_BUF_SIZE 4096
 
 struct qxl_ram_header {
-    uint32_t magic;
-    uint32_t int_pending;
-    uint32_t int_mask;
-    unsigned char log_buf[QXL_LOG_BUF_SIZE];
-    struct qxl_ring_header  cmd_ring_hdr;
-    struct qxl_command	    cmd_ring[32];
-    struct qxl_ring_header  cursor_ring_hdr;
-    struct qxl_command	    cursor_ring[32];
-    struct qxl_ring_header  release_ring_hdr;
-    uint64_t		    release_ring[8];
-    struct qxl_rect	    update_area;
+    uint32_t			magic;
+    uint32_t			int_pending;
+    uint32_t			int_mask;
+    unsigned char		log_buf[QXL_LOG_BUF_SIZE];
+    struct qxl_ring_header	cmd_ring_hdr;
+    struct qxl_command		cmd_ring[32];
+    struct qxl_ring_header	cursor_ring_hdr;
+    struct qxl_command		cursor_ring[32];
+    struct qxl_ring_header	release_ring_hdr;
+    uint64_t			release_ring[8];
+    struct qxl_rect		update_area;
+    /* appended for qxl-2 */
+    uint32_t			update_surface;
+    uint64_t			mem_slot_start;
+    uint64_t			mem_slot_end;
+    struct qxl_surface_create	create_surface;
+    uint64_t			flags;
 };
 
 #pragma pack(pop)
+typedef struct surface_cache_t surface_cache_t;
 
 typedef struct _qxl_screen_t qxl_screen_t;
+
+typedef struct
+{
+    uint8_t	generation;
+    uint64_t	start_phys_addr;
+    uint64_t	end_phys_addr;
+    uint64_t	start_virt_addr;
+    uint64_t	end_virt_addr;
+    uint64_t	high_bits;
+} qxl_memslot_t;
+
+typedef struct qxl_surface_t qxl_surface_t;
 
 struct _qxl_screen_t
 {
     /* These are the names QXL uses */
-    void *			ram;	/* Video RAM */
+    void *			ram;	/* Command RAM */
     void *			ram_physical;
-    void *			vram;	/* Command RAM */
+    void *			vram;	/* Surface RAM */
+    void *			vram_physical;
     struct qxl_rom *		rom;    /* Parameter RAM */
     
     struct qxl_ring *		command_ring;
@@ -486,13 +636,24 @@ struct _qxl_screen_t
     int				num_modes;
     struct qxl_mode *		modes;
     int				io_base;
-    int				draw_area_offset;
-    int				draw_area_size;
+    void *			surface0_area;
+    long			surface0_size;
+    long			vram_size;
 
+    int				virtual_x;
+    int				virtual_y;
     void *			fb;
+    int				stride;
+    struct qxl_mode *		current_mode;
+    qxl_surface_t *		primary;
+    
     int				bytes_per_pixel;
 
-    struct qxl_mem *		mem;	/* Context for qxl_alloc/free */
+    /* Commands */
+    struct qxl_mem *		mem;   /* Context for qxl_alloc/free */
+
+    /* Surfaces */
+    struct qxl_mem *		surf_mem;  /* Context for qxl_surf_alloc/free */
     
     EntityInfoPtr		entity;
 
@@ -505,17 +666,14 @@ struct _qxl_screen_t
     pciVideoPtr			pci;
     PCITAG			pci_tag;
 #endif
+    vgaRegRec                   vgaRegs;
 
+    uxa_driver_t *		uxa;
+    
     CreateScreenResourcesProcPtr create_screen_resources;
     CloseScreenProcPtr		close_screen;
     CreateGCProcPtr		create_gc;
-    PaintWindowProcPtr		paint_window_background;
-    PaintWindowProcPtr		paint_window_border;
     CopyWindowProcPtr		copy_window;
-    
-    DamagePtr			damage;
-    RegionRec			pending_copy;
-    RegionRec			to_be_sent;
     
     int16_t			cur_x;
     int16_t			cur_y;
@@ -523,18 +681,38 @@ struct _qxl_screen_t
     int16_t			hot_y;
     
     ScrnInfoPtr			pScrn;
+
+    qxl_memslot_t *		mem_slots;
+    uint8_t			n_mem_slots;
+
+    uint8_t			main_mem_slot;
+    uint8_t			slot_id_bits;
+    uint8_t			slot_gen_bits;
+    uint64_t			va_slot_mask;
+
+    uint8_t			vram_mem_slot;
+
+    surface_cache_t *		surface_cache;
 };
 
 static inline uint64_t
-physical_address (qxl_screen_t *qxl, void *virtual)
+physical_address (qxl_screen_t *qxl, void *virtual, uint8_t slot_id)
 {
-    return (uint64_t) ((unsigned long)virtual + (((unsigned long)qxl->ram_physical - (unsigned long)qxl->ram)));
+    qxl_memslot_t *p_slot = &(qxl->mem_slots[slot_id]);
+
+    return p_slot->high_bits | ((unsigned long)virtual - p_slot->start_virt_addr);
 }
 
 static inline void *
-virtual_address (qxl_screen_t *qxl, void *physical)
+virtual_address (qxl_screen_t *qxl, void *physical, uint8_t slot_id)
 {
-    return (void *) ((unsigned long)physical + ((unsigned long)qxl->ram - (unsigned long)qxl->ram_physical));
+    qxl_memslot_t *p_slot = &(qxl->mem_slots[slot_id]);
+    unsigned long virt;
+
+    virt = ((unsigned long)physical) & qxl->va_slot_mask;
+    virt += p_slot->start_virt_addr;
+
+    return (void *)virt;
 }
 
 static inline void *
@@ -572,6 +750,91 @@ Bool              qxl_ring_pop         (struct qxl_ring        *ring,
 void              qxl_ring_wait_idle   (struct qxl_ring        *ring);
 
 
+/*
+ * Surface
+ */
+surface_cache_t *   qxl_surface_cache_create (qxl_screen_t *qxl);
+qxl_surface_t *	    qxl_surface_cache_create_primary (surface_cache_t *qxl,
+						struct qxl_mode *mode);
+qxl_surface_t *	    qxl_surface_create (surface_cache_t *qxl,
+					int	      width,
+					int	      height,
+					int	      bpp);
+void
+qxl_surface_cache_sanity_check (surface_cache_t *qxl);
+void *
+qxl_surface_cache_evacuate_all (surface_cache_t *qxl);
+void
+qxl_surface_cache_replace_all (surface_cache_t *qxl, void *data);
+
+void		    qxl_surface_set_pixmap (qxl_surface_t *surface,
+					    PixmapPtr      pixmap);
+/* Call this to indicate that the server is done with the surface */
+void		    qxl_surface_kill (qxl_surface_t *surface);
+/* Call this when a notification comes back from the device
+ * that the surface has been destroyed
+ */
+void		    qxl_surface_recycle (surface_cache_t *cache, uint32_t id);
+
+/* send anything pending to the other side */
+void		    qxl_surface_flush (qxl_surface_t *surface);
+
+/* access */
+Bool		    qxl_surface_prepare_access (qxl_surface_t *surface,
+						PixmapPtr      pixmap,
+						RegionPtr      region,
+						uxa_access_t   access);
+void		    qxl_surface_finish_access (qxl_surface_t *surface,
+					       PixmapPtr      pixmap);
+
+/* solid */
+Bool		    qxl_surface_prepare_solid (qxl_surface_t *destination,
+					       Pixel	      fg);
+void		    qxl_surface_solid         (qxl_surface_t *destination,
+					       int	      x1,
+					       int	      y1,
+					       int	      x2,
+					       int	      y2);
+
+/* copy */
+Bool		    qxl_surface_prepare_copy (qxl_surface_t *source,
+					      qxl_surface_t *dest);
+void		    qxl_surface_copy	     (qxl_surface_t *dest,
+					      int  src_x1, int src_y1,
+					      int  dest_x1, int dest_y1,
+					      int width, int height);
+Bool		    qxl_surface_put_image    (qxl_surface_t *dest,
+					      int x, int y, int width, int height,
+					      const char *src, int src_pitch);
+void		    qxl_surface_unref        (surface_cache_t *cache,
+					      uint32_t surface_id);
+					      
+#if HAS_DEVPRIVATEKEYREC
+extern DevPrivateKeyRec uxa_pixmap_index;
+#else
+extern int uxa_pixmap_index;
+#endif
+
+static inline qxl_surface_t *get_surface (PixmapPtr pixmap)
+{
+#if HAS_DEVPRIVATEKEYREC
+    return dixGetPrivate(&pixmap->devPrivates, &uxa_pixmap_index);
+#else
+    return dixLookupPrivate(&pixmap->devPrivates, &uxa_pixmap_index);
+#endif
+}
+
+static inline void set_surface (PixmapPtr pixmap, qxl_surface_t *surface)
+{
+    dixSetPrivate(&pixmap->devPrivates, &uxa_pixmap_index, surface);
+}
+
+static inline struct qxl_ram_header *
+get_ram_header (qxl_screen_t *qxl)
+{
+    return (struct qxl_ram_header *)
+	((uint8_t *)qxl->ram + qxl->rom->ram_header_offset);
+}
 
 /*
  * Images
@@ -582,7 +845,8 @@ struct qxl_image *qxl_image_create     (qxl_screen_t           *qxl,
 					int                     y,
 					int                     width,
 					int                     height,
-					int                     stride);
+					int                     stride,
+					int                     Bpp);
 void              qxl_image_destroy    (qxl_screen_t           *qxl,
 					struct qxl_image       *image);
 void		  qxl_drop_image_cache (qxl_screen_t	       *qxl);
@@ -591,6 +855,7 @@ void		  qxl_drop_image_cache (qxl_screen_t	       *qxl);
 /*
  * Malloc
  */
+int		  qxl_handle_oom (qxl_screen_t *qxl);
 struct qxl_mem *  qxl_mem_create       (void                   *base,
 					unsigned long           n_bytes);
 void              qxl_mem_dump_stats   (struct qxl_mem         *mem,
@@ -602,5 +867,4 @@ void              qxl_free             (struct qxl_mem         *mem,
 void              qxl_mem_free_all     (struct qxl_mem         *mem);
 void *            qxl_allocnf          (qxl_screen_t           *qxl,
 					unsigned long           size);
-
-
+int		   qxl_garbage_collect (qxl_screen_t *qxl);

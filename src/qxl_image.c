@@ -1,3 +1,29 @@
+/*
+ * Copyright 2009, 2010 Red Hat, Inc.
+ *
+ * Permission is hereby granted, free of charge, to any person obtaining a
+ * copy of this software and associated documentation files (the "Software"),
+ * to deal in the Software without restriction, including without limitation
+ * on the rights to use, copy, modify, merge, publish, distribute, sub
+ * license, and/or sell copies of the Software, and to permit persons to whom
+ * the Software is furnished to do so, subject to the following conditions:
+ *
+ * The above copyright notice and this permission notice (including the next
+ * paragraph) shall be included in all copies or substantial portions of the
+ * Software.
+ *
+ * THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+ * IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+ * FITNESS FOR A PARTICULAR PURPOSE AND NON-INFRINGEMENT.  IN NO EVENT SHALL
+ * THE AUTHORS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER
+ * IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN
+ * CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
+ *
+ */
+/** \file qxl_image.c
+ * \author Søren Sandmann <sandmann@redhat.com>
+ */
+
 #include <string.h>
 #include <assert.h>
 #include <stdlib.h>
@@ -98,14 +124,14 @@ remove_image_info (image_info_t *info)
 struct qxl_image *
 qxl_image_create (qxl_screen_t *qxl, const uint8_t *data,
 		  int x, int y, int width, int height,
-		  int stride)
+		  int stride, int Bpp)
 {
     unsigned int hash;
     image_info_t *info;
 
-    data += y * stride + x * qxl->bytes_per_pixel;
+    data += y * stride + x * Bpp;
 
-    hash = hash_and_copy (data, stride, NULL, -1, qxl->bytes_per_pixel, width, height);
+    hash = hash_and_copy (data, stride, NULL, -1, Bpp, width, height);
 
     info = lookup_image_info (hash, width, height);
     if (info)
@@ -124,7 +150,7 @@ qxl_image_create (qxl_screen_t *qxl, const uint8_t *data,
 	    const uint8_t *src_line = data + i * stride;
 	    uint32_t *dest_line;
 		
-	    chunk = virtual_address (qxl, u64_to_pointer (info->image->u.bitmap.data));
+	    chunk = virtual_address (qxl, u64_to_pointer (info->image->u.bitmap.data), qxl->main_mem_slot);
 	    
 	    dest_line = (uint32_t *)chunk->data + width * i;
 
@@ -149,8 +175,7 @@ qxl_image_create (qxl_screen_t *qxl, const uint8_t *data,
     {
 	struct qxl_image *image;
 	struct qxl_data_chunk *chunk;
-	int dest_stride = width * qxl->bytes_per_pixel;
-	image_info_t *info;
+	int dest_stride = width * Bpp;
 
 #if 0
 	ErrorF ("Must create new image of size %d %d\n", width, height);
@@ -167,7 +192,7 @@ qxl_image_create (qxl_screen_t *qxl, const uint8_t *data,
 	
 	hash_and_copy (data, stride,
 		       chunk->data, dest_stride,
-		       qxl->bytes_per_pixel, width, height);
+		       Bpp, width, height);
 
 	/* Image */
 	image = qxl_allocnf (qxl, sizeof *image);
@@ -179,26 +204,33 @@ qxl_image_create (qxl_screen_t *qxl, const uint8_t *data,
 	image->descriptor.width = width;
 	image->descriptor.height = height;
 
-	if (qxl->bytes_per_pixel == 2)
+	if (Bpp == 2)
 	{
 	    image->u.bitmap.format = QXL_BITMAP_FMT_16BIT;
 	}
-	else
+	else if (Bpp == 1)
+	{
+	    image->u.bitmap.format = QXL_BITMAP_FMT_8BIT;
+	}
+	else if (Bpp == 4)
 	{
 	    image->u.bitmap.format = QXL_BITMAP_FMT_32BIT;
 	}
+	else
+	  abort();
 
 	image->u.bitmap.flags = QXL_BITMAP_TOP_DOWN;
 	image->u.bitmap.x = width;
 	image->u.bitmap.y = height;
-	image->u.bitmap.stride = width * qxl->bytes_per_pixel;
+	image->u.bitmap.stride = width * Bpp;
 	image->u.bitmap.palette = 0;
-	image->u.bitmap.data = physical_address (qxl, chunk);
+	image->u.bitmap.data = physical_address (qxl, chunk, qxl->main_mem_slot);
 
 #if 0
 	ErrorF ("%p has size %d %d\n", image, width, height);
 #endif
 	
+#if 0
 	/* Add to hash table */
 	if ((info = insert_image_info (hash)))
 	{
@@ -212,6 +244,7 @@ qxl_image_create (qxl_screen_t *qxl, const uint8_t *data,
 	    ErrorF ("added with hash %u\n", hash);
 #endif
 	}
+#endif
 
 	return image;
     }
@@ -224,7 +257,7 @@ qxl_image_destroy (qxl_screen_t *qxl,
     struct qxl_data_chunk *chunk;
     image_info_t *info;
 
-    chunk = virtual_address (qxl, u64_to_pointer (image->u.bitmap.data));
+    chunk = virtual_address (qxl, u64_to_pointer (image->u.bitmap.data), qxl->main_mem_slot);
     
     info = lookup_image_info (image->descriptor.id,
 			      image->descriptor.width,

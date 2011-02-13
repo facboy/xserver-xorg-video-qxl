@@ -20,16 +20,19 @@
 #
 # Process this file with autoconf to produce a configure script
 
+# Initialize Autoconf
 AC_PREREQ([2.60])
 AC_INIT([xf86-video-qxl],
-        [0.0.12],
+        [0.0.13],
         [https://bugs.freedesktop.org/enter_bug.cgi?product=xorg],
         [xf86-video-qxl])
 AC_CONFIG_SRCDIR([Makefile.am])
 AC_CANONICAL_HOST
+
+# Initialize Automake
 AM_INIT_AUTOMAKE([foreign dist-bzip2])
 AM_MAINTAINER_MODE
-AM_CONFIG_HEADER([config.h])
+AC_CONFIG_HEADERS([config.h])
 
 # Require xorg-macros: XORG_DEFAULT_OPTIONS
 m4_ifndef([XORG_MACROS_VERSION],
@@ -37,28 +40,26 @@ m4_ifndef([XORG_MACROS_VERSION],
 XORG_MACROS_VERSION(1.4)
 XORG_DEFAULT_OPTIONS
 
-# Checks for programs.
+# Initialize libtool
 AC_DISABLE_STATIC
-AC_PROG_CC
-AC_PROG_CC_C99
 AC_PROG_INSTALL
 AC_PROG_LIBTOOL
 
 AH_TOP([#include "xorg-server.h"])
 
+# Define a configure option for an alternate module directory
 AC_ARG_WITH(xorg-module-dir, [  --with-xorg-module-dir=DIR ],
                              [ moduledir="$withval" ],
                              [ moduledir="$libdir/xorg/modules" ])
 AC_SUBST(moduledir)
 
-
-# Checks for extensions
+# Store the list of server defined optional extensions in REQUIRED_MODULES
 XORG_DRIVER_CHECK_EXT(RANDR, randrproto)
 XORG_DRIVER_CHECK_EXT(RENDER, renderproto)
 XORG_DRIVER_CHECK_EXT(XV, videoproto)
 XORG_DRIVER_CHECK_EXT(XFreeXDGA, xf86dgaproto)
 
-# Checks for pkg-config packages
+# Obtain compiler/linker options for the driver dependencies
 PKG_CHECK_MODULES(XORG, [xorg-server >= 1.0.99.901] xproto fontsproto $REQUIRED_MODULES)
 
 save_CFLAGS="$CFLAGS"
@@ -73,25 +74,14 @@ if test "x$XSERVER_LIBPCIACCESS" = xyes; then
 fi
 AM_CONDITIONAL(XSERVER_LIBPCIACCESS, test "x$XSERVER_LIBPCIACCESS" = xyes)
 
-# blah, should be XORG_CWARNFLAGS
-if test "x$GCC" = xyes ; then
-        CWARNFLAGS="-Wall -Wstrict-prototypes -Wpointer-arith -Wmissing-prototypes -Wmissing-declarations -Wnested-externs -fno-strict-aliasing -Wold-style-definition -Wbad-function-cast -Wdeclaration-after-statement"
-fi
-
-CFLAGS="$CFLAGS $CWARNFLAGS $XORG_CFLAGS "' -I$(top_srcdir)/src'
-INCLUDES="$XORG_INCS "'-I$(top_srcdir)/src'
-AC_SUBST([CFLAGS])
-AC_SUBST([INCLUDES])
-
 # Checks for libraries.
-
-# Checks for header files.
-AC_HEADER_STDC
 
 DRIVER_NAME=qxl
 AC_SUBST([DRIVER_NAME])
 
-AC_OUTPUT([
-	Makefile
-	src/Makefile
+AC_CONFIG_FILES([
+                Makefile
+                src/Makefile
+		src/uxa/Makefile
 ])
+AC_OUTPUT

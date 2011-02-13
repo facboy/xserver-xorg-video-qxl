@@ -24,17 +24,26 @@
 # -avoid-version prevents gratuitous .0.0.0 version numbers on the end
 # _ladir passes a dummy rpath to libtool so the thing will actually link
 # TODO: -nostdlib/-Bstatic/-lgcc platform magic, not installing the .a, etc.
+
+SUBDIRS=uxa
+
+AM_CFLAGS = $(XORG_CFLAGS) $(PCIACCESS_CFLAGS) $(CWARNFLAGS)
+
 qxl_drv_la_LTLIBRARIES = qxl_drv.la
 qxl_drv_la_LDFLAGS = -module -avoid-version
 qxl_drv_ladir = @moduledir@/drivers
-AM_CFLAGS = -g
+
+qxl_drv_la_LIBADD = uxa/libuxa.la
 
 qxl_drv_la_SOURCES =				\
 	qxl.h					\
 	qxl_driver.c				\
 	qxl_image.c				\
+	qxl_surface.c				\
 	qxl_ring.c				\
 	qxl_mem.c				\
+	mspace.c				\
+	mspace.h				\
 	lookup3.c				\
 	lookup3.h				\
 	qxl_cursor.c

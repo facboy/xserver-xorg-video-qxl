@@ -1,5 +1,5 @@
 /*
- * Copyright 2009 Red Hat, Inc.
+ * Copyright 2009, 2010 Red Hat, Inc.
  *
  * Permission is hereby granted, free of charge, to any person obtaining a
  * copy of this software and associated documentation files (the "Software"),
@@ -18,6 +18,10 @@
  * THE AUTHORS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER
  * IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN
  * CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
+ *
+ */
+/** \file qxl_image.c
+ * \author Søren Sandmann <sandmann@redhat.com>
  */
 
 #include <string.h>
@@ -30,10 +34,10 @@ push_cursor (qxl_screen_t *qxl, struct qxl_cursor_cmd *cursor)
     struct qxl_command cmd;
 
     /* See comment on push_command() in qxl_driver.c */
-    if (qxl->rom->mode != ~0)
+    if (qxl->pScrn->vtSema)
     {
         cmd.type = QXL_CMD_CURSOR;
-        cmd.data = physical_address (qxl, cursor);
+        cmd.data = physical_address (qxl, cursor, qxl->main_mem_slot);
       
         qxl_ring_push (qxl->cursor_ring, &cmd);
     }
@@ -62,7 +66,7 @@ qxl_set_cursor_position(ScrnInfoPtr pScrn, int x, int y)
     cmd->type = QXL_CURSOR_MOVE;
     cmd->u.position.x = qxl->cur_x + qxl->hot_x;
     cmd->u.position.y = qxl->cur_y + qxl->hot_y;
-
+    
     push_cursor(qxl, cmd);
 }
 
@@ -127,7 +131,7 @@ qxl_load_cursor_argb (ScrnInfoPtr pScrn, CursorPtr pCurs)
     cmd->type = QXL_CURSOR_SET;
     cmd->u.set.position.x = qxl->cur_x + qxl->hot_x;
     cmd->u.set.position.y = qxl->cur_y + qxl->hot_y;
-    cmd->u.set.shape = physical_address (qxl, cursor);
+    cmd->u.set.shape = physical_address (qxl, cursor, qxl->main_mem_slot);
     cmd->u.set.visible = TRUE;
 
     push_cursor(qxl, cmd);
@@ -167,7 +171,7 @@ qxl_show_cursor(ScrnInfoPtr pScrn)
      * QXL_CURSOR_SET?
      */
     qxl_screen_t *qxl = pScrn->driverPrivate;
-
+    
     qxl_set_cursor_position(pScrn, qxl->cur_x, qxl->cur_y);
 }
 
@@ -176,7 +180,7 @@ qxl_cursor_init(ScreenPtr pScreen)
 {
     xf86CursorInfoPtr cursor;
 
-    cursor = xcalloc(1, sizeof(xf86CursorInfoRec));
+    cursor = calloc(1, sizeof(xf86CursorInfoRec));
     if (!cursor)
 	return;
 
@@ -192,5 +196,5 @@ qxl_cursor_init(ScreenPtr pScreen)
     cursor->ShowCursor = qxl_show_cursor;
 
     if (!xf86InitCursor(pScreen, cursor))
-	xfree(cursor);
+      free(cursor);
 }
