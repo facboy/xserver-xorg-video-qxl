@@ -7,6 +7,7 @@ xserver-xorg-video-qxl (0.0.13-1) unstable; urgency=low
     - Use dh-autoreconf.
   * Remove fix_qxl_driver_assert.patch, already in upstream. 
   * Bump Standards-Version to 3.9.1, no changes needed.
+  * Add quilt build-dep.
 
  -- Liang Guo <bluestonechina@gmail.com>  Sun, 13 Feb 2011 17:03:55 +0800
 
