@@ -4,9 +4,9 @@ Priority: optional
 Maintainer: Debian X Strike Force <debian-x@lists.debian.org>
 Uploaders: Liang Guo <bluestonechina@gmail.com>
 Build-Depends:
- debhelper (>= 7.0.50),
+ debhelper (>= 8),
  pkg-config,
- xserver-xorg-dev (>= 1.7.6.901),
+ xserver-xorg-dev (>= 2:1.9.4),
  x11proto-core-dev,
  x11proto-fonts-dev,
  x11proto-randr-dev,
