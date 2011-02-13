@@ -5,6 +5,7 @@ xserver-xorg-video-qxl (0.0.13-1) unstable; urgency=low
   * Switch to dh:
     - Use debhelper 8.
     - Use dh-autoreconf.
+  * Remove fix_qxl_driver_assert.patch, already in upstream. 
 
  -- Liang Guo <bluestonechina@gmail.com>  Sun, 13 Feb 2011 17:03:55 +0800
 
