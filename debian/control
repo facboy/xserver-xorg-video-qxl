@@ -21,7 +21,7 @@ Build-Depends:
  xutils-dev (>= 1:7.5),
  quilt (>= 0.46-7~),
  libspice-protocol-dev,
-Standards-Version: 3.9.1
+Standards-Version: 3.9.2
 Homepage: http://spice-space.org/
 Vcs-Git: git://git.debian.org/git/pkg-xorg/driver/xserver-xorg-video-qxl
 Vcs-Browser: http://git.debian.org/?p=pkg-xorg/driver/xserver-xorg-video-qxl.git
