@@ -23,7 +23,7 @@
 # Initialize Autoconf
 AC_PREREQ([2.60])
 AC_INIT([xf86-video-qxl],
-        [0.0.13],
+        [0.0.14],
         [https://bugs.freedesktop.org/enter_bug.cgi?product=xorg],
         [xf86-video-qxl])
 AC_CONFIG_SRCDIR([Makefile.am])
@@ -75,6 +75,8 @@ fi
 AM_CONDITIONAL(XSERVER_LIBPCIACCESS, test "x$XSERVER_LIBPCIACCESS" = xyes)
 
 # Checks for libraries.
+
+PKG_CHECK_MODULES([SPICE_PROTOCOL], [spice-protocol >= 0.7.0])
 
 DRIVER_NAME=qxl
 AC_SUBST([DRIVER_NAME])
