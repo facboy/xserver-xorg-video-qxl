@@ -4,6 +4,7 @@ xserver-xorg-video-qxl (0.0.14-1) UNRELEASED; urgency=low
     - Fix VT switching issues.
   * Add libspice-protocol-dev build-dep.
   * Bump Standards-Version to 3.9.2 (no changes).
+  * Fix typo and missing space in long description.
 
  -- Cyril Brulebois <kibi@debian.org>  Fri, 15 Jul 2011 09:50:38 +0200
 

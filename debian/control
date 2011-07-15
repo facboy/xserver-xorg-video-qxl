@@ -32,7 +32,7 @@ Depends: ${shlibs:Depends}, ${misc:Depends}, ${xviddriver:Depends}
 Provides: ${xviddriver:Provides}
 Description: X.Org X server -- QXL display driver
  This package provides the driver for QXL video device, i.e. if Linux is 
- running inside a RedHat Enterprise Virtulization(RHEV) environment, or
+ running inside a RedHat Enterprise Virtualization (RHEV) environment, or
  other SPICE-compatible KVM/Qemu emulator. 
  .
  More information about X.Org can be found at:
