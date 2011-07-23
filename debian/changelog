@@ -2,7 +2,8 @@ xserver-xorg-video-qxl (0.0.14-1) UNRELEASED; urgency=low
 
   * New upstream release:
     - Fix VT switching issues.
-  * Add libspice-protocol-dev build-dep.
+  * Add libspice-protocol-dev build-dep:
+    - Versioned because of FDO#39249.
   * Bump Standards-Version to 3.9.2 (no changes).
   * Fix typo and missing space in long description.
 
