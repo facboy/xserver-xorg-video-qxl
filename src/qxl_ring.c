@@ -39,14 +39,16 @@ struct qxl_ring
     volatile struct ring *ring;
     int			element_size;
     int			n_elements;
-    int			prod_notify;
+    int			io_port_prod_notify;
+    qxl_screen_t    *qxl;
 };
 
 struct qxl_ring *
 qxl_ring_create (struct qxl_ring_header *header,
 		 int                     element_size,
 		 int                     n_elements,
-		 int			 prod_notify)
+		 int			 io_port_prod_notify,
+		 qxl_screen_t           *qxl)
 {
     struct qxl_ring *ring;
 
@@ -57,8 +59,8 @@ qxl_ring_create (struct qxl_ring_header *header,
     ring->ring = (volatile struct ring *)header;
     ring->element_size = element_size;
     ring->n_elements = n_elements;
-    ring->prod_notify = prod_notify;
-    
+    ring->io_port_prod_notify = io_port_prod_notify;
+    ring->qxl = qxl;
     return ring;
 }
 
@@ -73,7 +75,11 @@ qxl_ring_push (struct qxl_ring *ring,
     while (header->prod - header->cons == header->num_items)
     {
 	header->notify_on_cons = header->cons + 1;
-
+#ifdef XSPICE
+	/* in gtkperf, circles, this is a major bottleneck. Can't be that good in a vm either
+	 * Adding the yield reduces cpu usage, but doesn't improve throughput. */
+	pthread_yield();
+#endif
 	mem_barrier();
     }
 
@@ -86,8 +92,9 @@ qxl_ring_push (struct qxl_ring *ring,
 
     mem_barrier();
 
-    if (header->prod == header->notify_on_prod)
-	outb (ring->prod_notify, 0);
+    if (header->prod == header->notify_on_prod) {
+        ioport_write (ring->qxl, ring->io_port_prod_notify, 0);
+    }
 }
 
 Bool

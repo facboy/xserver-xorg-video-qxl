@@ -23,7 +23,7 @@
 # Initialize Autoconf
 AC_PREREQ([2.60])
 AC_INIT([xf86-video-qxl],
-        [0.0.14],
+        [0.0.16],
         [https://bugs.freedesktop.org/enter_bug.cgi?product=xorg],
         [xf86-video-qxl])
 AC_CONFIG_SRCDIR([Makefile.am])
@@ -76,14 +76,61 @@ AM_CONDITIONAL(XSERVER_LIBPCIACCESS, test "x$XSERVER_LIBPCIACCESS" = xyes)
 
 # Checks for libraries.
 
-PKG_CHECK_MODULES([SPICE_PROTOCOL], [spice-protocol >= 0.7.0])
+enable_qxl=yes
+AC_ARG_ENABLE(xspice,
+[  --enable-xspice[[=(no|yes|only)]]  Build the xspice driver
+                   no      (default) Do not build
+                   yes     Build in addition to qxl
+                   only    Only build xspice],
+[  if test "x$enableval" = "xyes"; then
+        enable_xspice=yes
+   elif test "x$enableval" = "xonly"; then
+        enable_xspice=yes
+        enable_qxl=no
+   else
+        enable_xspice=no
+   fi
+])
 
-DRIVER_NAME=qxl
-AC_SUBST([DRIVER_NAME])
+if test "x$enable_xspice" = "xyes"; then
+    PKG_CHECK_MODULES([SPICE], [spice-server >= 0.6.3],
+    [
+        AC_SUBST(SPICE_CFLAGS)
+        AC_SUBST(SPICE_LIBS)
+    ],
+)
+else
+    enable_xspice=no
+fi
+AM_CONDITIONAL(BUILD_XSPICE, test "x$enable_xspice" = "xyes")
+AM_CONDITIONAL(BUILD_QXL, test "x$enable_qxl" = "xyes")
+
+PKG_CHECK_MODULES([SPICE_PROTOCOL], [spice-protocol >= 0.8.1])
+
+AC_CHECK_FILE(.git, [
+    GIT_VERSION=`git log -1 --format=%h`
+    AC_DEFINE_UNQUOTED([GIT_VERSION], ["$GIT_VERSION"], [Defined if building from git])
+    ], []
+)
 
 AC_CONFIG_FILES([
                 Makefile
                 src/Makefile
-		src/uxa/Makefile
+                src/uxa/Makefile
+                scripts/Makefile
+                examples/Makefile
 ])
 AC_OUTPUT
+
+dnl ==========================================================================
+echo "
+
+        xf86-video-qxl $VERSION
+        =====================
+
+        prefix:                   ${prefix}
+        c compiler:               ${CC}
+
+        Build qxl:                ${enable_qxl}
+        Build xspice:             ${enable_xspice}
+"

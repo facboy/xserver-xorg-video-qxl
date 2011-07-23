@@ -378,7 +378,7 @@ qxl_surface_cache_create_primary (surface_cache_t	*cache,
     create->type = QXL_SURF_TYPE_PRIMARY;
     create->mem = physical_address (cache->qxl, cache->qxl->ram, cache->qxl->main_mem_slot);
 
-    outb (qxl->io_base + QXL_IO_CREATE_PRIMARY, 0);
+    ioport_write(qxl, QXL_IO_CREATE_PRIMARY, 0);
 
     dev_addr = (uint8_t *)qxl->ram + mode->stride * (mode->y_res - 1);
 
@@ -920,7 +920,7 @@ download_box (qxl_surface_t *surface, int x1, int y1, int x2, int y2)
     ErrorF ("Issuing update command for %d\n", surface->id);
 #endif
 
-    outb (surface->cache->qxl->io_base + QXL_IO_UPDATE_AREA, 0);
+    ioport_write(surface->cache->qxl, QXL_IO_UPDATE_AREA, 0);
 
     pixman_image_composite (PIXMAN_OP_SRC,
      			    surface->dev_image,
@@ -1240,6 +1240,7 @@ qxl_surface_cache_replace_all (surface_cache_t *cache, void *data)
 
 }
 
+#ifdef DEBUG_REGIONS
 static void
 print_region (const char *header, RegionPtr pRegion)
 {
@@ -1262,6 +1263,7 @@ print_region (const char *header, RegionPtr pRegion)
 	pbox++;
     }
 }
+#endif // DEBUG_REGIONS
 
 /* solid */
 Bool
@@ -1273,7 +1275,7 @@ qxl_surface_prepare_solid (qxl_surface_t *destination,
 	ErrorF (" solid not in vmem\n");
     }
 
-#if 0
+#ifdef DEBUG_REGIONS
     print_region ("prepare solid", &(destination->access_region));
 #endif
     
@@ -1328,7 +1330,7 @@ qxl_surface_prepare_copy (qxl_surface_t *dest,
 	return FALSE;
 #endif
 
-#if 0
+#ifdef DEBUG_REGIONS
     print_region ("prepare copy src", &(source->access_region));
     print_region ("prepare copy dest", &(dest->access_region));
 #endif
@@ -1348,7 +1350,7 @@ qxl_surface_copy (qxl_surface_t *dest,
     struct QXLDrawable *drawable;
     struct QXLRect qrect;
 
-#if 0
+#ifdef DEBUG_REGIONS
     print_region (" copy src", &(dest->u.copy_src->access_region));
     print_region (" copy dest", &(dest->access_region));
 #endif

@@ -37,10 +37,70 @@
 #include "qxl.h"
 #include "assert.h"
 
+#ifdef XSPICE
+#include "spiceqxl_driver.h"
+#include "spiceqxl_main_loop.h"
+#include "spiceqxl_display.h"
+#include "spiceqxl_inputs.h"
+#include "spiceqxl_io_port.h"
+#include "spiceqxl_spice_server.h"
+#endif /* XSPICE */
+
 #if 0
 #define CHECK_POINT() ErrorF ("%s: %d  (%s)\n", __FILE__, __LINE__, __FUNCTION__);
 #endif
 #define CHECK_POINT()
+
+const OptionInfoRec DefaultOptions[] = {
+#ifdef XSPICE
+    { OPTION_SPICE_PORT,
+        "SpicePort",                OPTV_INTEGER,   {5900}, FALSE },
+    { OPTION_SPICE_TLS_PORT,
+        "SpiceTlsPort",             OPTV_INTEGER,   {0}, FALSE},
+    { OPTION_SPICE_ADDR,
+        "SpiceAddr",                OPTV_STRING,    {0}, FALSE},
+    { OPTION_SPICE_X509_DIR,
+        "SpiceX509Dir",             OPTV_STRING,    {0}, FALSE},
+    { OPTION_SPICE_SASL,
+        "SpiceSasl",                OPTV_BOOLEAN,   {0}, FALSE},
+    /* VVV qemu defaults to 1 - not implemented in xspice yet */
+    { OPTION_SPICE_AGENT_MOUSE,
+        "SpiceAgentMouse",          OPTV_BOOLEAN,   {0}, FALSE},
+    { OPTION_SPICE_DISABLE_TICKETING,
+        "SpiceDisableTicketing",    OPTV_BOOLEAN,   {0}, FALSE},
+    { OPTION_SPICE_PASSWORD,
+        "SpicePassword",            OPTV_STRING,    {0}, FALSE},
+    { OPTION_SPICE_X509_KEY_FILE,
+        "SpiceX509KeyFile",         OPTV_STRING,    {0}, FALSE},
+    { OPTION_SPICE_STREAMING_VIDEO,
+        "SpiceStreamingVideo",      OPTV_STRING,    {.str="filter"}, FALSE},
+    { OPTION_SPICE_PLAYBACK_COMPRESSION,
+        "SpicePlaybackCompression", OPTV_BOOLEAN,   {1}, FALSE},
+    { OPTION_SPICE_ZLIB_GLZ_WAN_COMPRESSION,
+        "SpiceZlibGlzWanCompression", OPTV_STRING,  {.str="auto"}, FALSE},
+    { OPTION_SPICE_JPEG_WAN_COMPRESSION,
+        "SpiceJpegWanCompression",  OPTV_STRING,    {.str="auto"}, FALSE},
+    { OPTION_SPICE_IMAGE_COMPRESSION,
+        "SpiceImageCompression",    OPTV_STRING,    {.str="auto_glz"}, FALSE},
+    { OPTION_SPICE_DISABLE_COPY_PASTE,
+        "SpiceDisableCopyPaste",    OPTV_BOOLEAN,   {0}, FALSE},
+    { OPTION_SPICE_IPV4_ONLY,
+        "SpiceIPV4Only",            OPTV_BOOLEAN,   {0}, FALSE},
+    { OPTION_SPICE_IPV6_ONLY,
+        "SpiceIPV6Only",            OPTV_BOOLEAN,   {0}, FALSE},
+    { OPTION_SPICE_X509_CERT_FILE,
+        "SpiceX509CertFile",        OPTV_STRING,    {0}, FALSE},
+    { OPTION_SPICE_X509_KEY_PASSWORD,
+        "SpiceX509KeyPassword",     OPTV_STRING,    {0}, FALSE},
+    { OPTION_SPICE_TLS_CIPHERS,
+        "SpiceTlsCiphers",          OPTV_STRING,    {0}, FALSE},
+    { OPTION_SPICE_CACERT_FILE,
+        "SpiceCacertFile",          OPTV_STRING,    {0}, FALSE},
+    { OPTION_SPICE_DH_FILE,
+        "SpiceDhFile",              OPTV_STRING,    {0}, FALSE},
+#endif
+    { -1, NULL, OPTV_NONE, {0}, FALSE }
+};
 
 int
 qxl_garbage_collect (qxl_screen_t *qxl)
@@ -130,7 +190,7 @@ qxl_usleep (int useconds)
 int
 qxl_handle_oom (qxl_screen_t *qxl)
 {
-    outb (qxl->io_base + QXL_IO_NOTIFY_OOM, 0);
+    ioport_write(qxl, QXL_IO_NOTIFY_OOM, 0);
     
 #if 0
     ErrorF (".");
@@ -168,7 +228,7 @@ qxl_allocnf (qxl_screen_t *qxl, unsigned long size)
 	ram_header->update_area.right = qxl->virtual_x;
 	ram_header->update_surface = 0;		/* Only primary for now */
 	
-	outb (qxl->io_base + QXL_IO_UPDATE_AREA, 0);
+	ioport_write(qxl, QXL_IO_UPDATE_AREA, 0);
 	
 #if 0
  	ErrorF ("eliminated memory (%d)\n", nth_oom++);
@@ -200,8 +260,30 @@ qxl_blank_screen(ScreenPtr pScreen, int mode)
     return TRUE;
 }
 
+#ifdef XSPICE
 static void
-qxl_unmap_memory(qxl_screen_t *qxl, int scrnIndex)
+unmap_memory_helper(qxl_screen_t *qxl, int scrnIndex)
+{
+    free(qxl->ram);
+    free(qxl->vram);
+    free(qxl->rom);
+}
+
+static void
+map_memory_helper(qxl_screen_t *qxl, int scrnIndex)
+{
+    qxl->ram = malloc(RAM_SIZE);
+    qxl->ram_physical = qxl->ram;
+    qxl->vram = malloc(VRAM_SIZE);
+    qxl->vram_size = VRAM_SIZE;
+    qxl->vram_physical = qxl->vram;
+    qxl->rom = malloc(ROM_SIZE);
+
+    init_qxl_rom(qxl, ROM_SIZE);
+}
+#else /* Default */
+static void
+unmap_memory_helper(qxl_screen_t *qxl, int scrnIndex)
 {
 #ifdef XSERVER_LIBPCIACCESS
     if (qxl->ram)
@@ -218,9 +300,63 @@ qxl_unmap_memory(qxl_screen_t *qxl, int scrnIndex)
     if (qxl->rom)
 	xf86UnMapVidMem(scrnIndex, qxl->rom, (1 << qxl->pci->size[2]));
 #endif
-    
+}
+
+static void
+map_memory_helper(qxl_screen_t *qxl, int scrnIndex)
+{
+#ifdef XSERVER_LIBPCIACCESS
+    pci_device_map_range(qxl->pci, qxl->pci->regions[0].base_addr,
+			 qxl->pci->regions[0].size,
+			 PCI_DEV_MAP_FLAG_WRITABLE | PCI_DEV_MAP_FLAG_WRITE_COMBINE,
+			 &qxl->ram);
+    qxl->ram_physical = u64_to_pointer (qxl->pci->regions[0].base_addr);
+
+    pci_device_map_range(qxl->pci, qxl->pci->regions[1].base_addr,
+			 qxl->pci->regions[1].size,
+			 PCI_DEV_MAP_FLAG_WRITABLE,
+			 &qxl->vram);
+    qxl->vram_physical = u64_to_pointer (qxl->pci->regions[1].base_addr);
+    qxl->vram_size = qxl->pci->regions[1].size;
+
+    pci_device_map_range(qxl->pci, qxl->pci->regions[2].base_addr,
+			 qxl->pci->regions[2].size, 0,
+			 (void **)&qxl->rom);
+
+    qxl->io_base = qxl->pci->regions[3].base_addr;
+#else
+    qxl->ram = xf86MapPciMem(scrnIndex, VIDMEM_FRAMEBUFFER,
+			     qxl->pci_tag, qxl->pci->memBase[0],
+			     (1 << qxl->pci->size[0]));
+    qxl->ram_physical = (void *)qxl->pci->memBase[0];
+
+    qxl->vram = xf86MapPciMem(scrnIndex, VIDMEM_MMIO | VIDMEM_MMIO_32BIT,
+			      qxl->pci_tag, qxl->pci->memBase[1],
+			      (1 << qxl->pci->size[1]));
+    qxl->vram_physical = (void *)qxl->pci->memBase[1];
+    qxl->vram_size = (1 << qxl->pci->size[1]);
+
+    qxl->rom = xf86MapPciMem(scrnIndex, VIDMEM_MMIO | VIDMEM_MMIO_32BIT,
+			     qxl->pci_tag, qxl->pci->memBase[2],
+			     (1 << qxl->pci->size[2]));
+
+    qxl->io_base = qxl->pci->ioBase[3];
+#endif
+}
+#endif /* XSPICE */
+
+static void
+qxl_unmap_memory(qxl_screen_t *qxl, int scrnIndex)
+{
+#ifdef XSPICE
+    if (qxl->worker) {
+        qxl->worker->stop(qxl->worker);
+        qxl->worker_running = FALSE;
+    }
+#endif
+    unmap_memory_helper(qxl, scrnIndex);
     qxl->ram = qxl->ram_physical = qxl->vram = qxl->rom = NULL;
-    
+
     qxl->num_modes = 0;
     qxl->modes = NULL;
 }
@@ -228,49 +364,14 @@ qxl_unmap_memory(qxl_screen_t *qxl, int scrnIndex)
 static Bool
 qxl_map_memory(qxl_screen_t *qxl, int scrnIndex)
 {
-#ifdef XSERVER_LIBPCIACCESS
-    pci_device_map_range(qxl->pci, qxl->pci->regions[0].base_addr, 
-			 qxl->pci->regions[0].size,
-			 PCI_DEV_MAP_FLAG_WRITABLE | PCI_DEV_MAP_FLAG_WRITE_COMBINE,
-			 &qxl->ram);
-    qxl->ram_physical = u64_to_pointer (qxl->pci->regions[0].base_addr);
-    
-    pci_device_map_range(qxl->pci, qxl->pci->regions[1].base_addr, 
-			 qxl->pci->regions[1].size,
-			 PCI_DEV_MAP_FLAG_WRITABLE,
-			 &qxl->vram);
-    qxl->vram_physical = u64_to_pointer (qxl->pci->regions[1].base_addr);
-    qxl->vram_size = qxl->pci->regions[1].size;
-    
-    pci_device_map_range(qxl->pci, qxl->pci->regions[2].base_addr, 
-			 qxl->pci->regions[2].size, 0,
-			 (void **)&qxl->rom);
-    
-    qxl->io_base = qxl->pci->regions[3].base_addr;
-#else
-    qxl->ram = xf86MapPciMem(scrnIndex, VIDMEM_FRAMEBUFFER,
-			     qxl->pci_tag, qxl->pci->memBase[0],
-			     (1 << qxl->pci->size[0]));
-    qxl->ram_physical = (void *)qxl->pci->memBase[0];
-    
-    qxl->vram = xf86MapPciMem(scrnIndex, VIDMEM_MMIO | VIDMEM_MMIO_32BIT,
-			      qxl->pci_tag, qxl->pci->memBase[1],
-			      (1 << qxl->pci->size[1]));
-    qxl->vram_physical = (void *)qxl->pci->memBase[1];
-    qxl->vram_size = (1 << qxl->pci->size[1]);
-    
-    qxl->rom = xf86MapPciMem(scrnIndex, VIDMEM_MMIO | VIDMEM_MMIO_32BIT,
-			     qxl->pci_tag, qxl->pci->memBase[2],
-			     (1 << qxl->pci->size[2]));
-    
-    qxl->io_base = qxl->pci->ioBase[3];
-#endif
+    map_memory_helper(qxl, scrnIndex);
+
     if (!qxl->ram || !qxl->vram || !qxl->rom)
 	return FALSE;
-    
+
     xf86DrvMsg(scrnIndex, X_INFO, "framebuffer at %p (%d KB)\n",
 	       qxl->ram, qxl->rom->surface0_area_size / 1024);
-    
+
     xf86DrvMsg(scrnIndex, X_INFO, "command ram at %p (%d KB)\n",
 	       (void *)((unsigned long)qxl->ram + qxl->rom->surface0_area_size),
 	       (qxl->rom->num_pages * getpagesize() - qxl->rom->surface0_area_size)/1024);
@@ -279,7 +380,7 @@ qxl_map_memory(qxl_screen_t *qxl, int scrnIndex)
 	       qxl->vram, qxl->vram_size / 1024);
 
     xf86DrvMsg(scrnIndex, X_INFO, "rom at %p\n", qxl->rom);
-    
+
     qxl->num_modes = *(uint32_t *)((uint8_t *)qxl->rom + qxl->rom->modes_offset);
     qxl->modes = (struct QXLMode *)(((uint8_t *)qxl->rom) + qxl->rom->modes_offset + 4);
     qxl->surface0_area = qxl->ram;
@@ -292,6 +393,17 @@ qxl_map_memory(qxl_screen_t *qxl, int scrnIndex)
     return TRUE;
 }
 
+#ifdef XSPICE
+static void
+qxl_save_state(ScrnInfoPtr pScrn)
+{
+}
+
+static void
+qxl_restore_state(ScrnInfoPtr pScrn)
+{
+}
+#else /* QXL */
 static void
 qxl_save_state(ScrnInfoPtr pScrn)
 {
@@ -307,6 +419,7 @@ qxl_restore_state(ScrnInfoPtr pScrn)
 
     vgaHWRestoreFonts(pScrn, &qxl->vgaRegs);
 }
+#endif /* XSPICE */
 
 static Bool
 qxl_close_screen(int scrnIndex, ScreenPtr pScreen)
@@ -335,17 +448,42 @@ qxl_close_screen(int scrnIndex, ScreenPtr pScreen)
     return result;
 }
 
+static uint8_t
+setup_slot(qxl_screen_t *qxl, uint8_t slot_index_offset,
+    unsigned long start_phys_addr, unsigned long end_phys_addr,
+    uint64_t start_virt_addr, uint64_t end_virt_addr)
+{
+    uint64_t high_bits;
+    qxl_memslot_t *slot;
+    uint8_t slot_index;
+    struct QXLRam *ram_header;
+    ram_header = (void *)((unsigned long)qxl->ram + (unsigned long)qxl->rom->ram_header_offset);
+
+    slot_index = qxl->rom->slots_start + slot_index_offset;
+    slot = &qxl->mem_slots[slot_index];
+    slot->start_phys_addr = start_phys_addr;
+    slot->end_phys_addr = end_phys_addr;
+    slot->start_virt_addr = start_virt_addr;
+    slot->end_virt_addr = end_virt_addr;
+
+    ram_header->mem_slot.mem_start = slot->start_phys_addr;
+    ram_header->mem_slot.mem_end = slot->end_phys_addr;
+
+    ioport_write(qxl, QXL_IO_MEMSLOT_ADD, slot_index);
+
+    slot->generation = qxl->rom->slot_generation;
+    
+    high_bits = slot_index << qxl->slot_gen_bits;
+    high_bits |= slot->generation;
+    high_bits <<= (64 - (qxl->slot_gen_bits + qxl->slot_id_bits));
+    slot->high_bits = high_bits;
+    return slot_index;
+}
+
 static void
 qxl_reset (qxl_screen_t *qxl)
 {
-    qxl_memslot_t *slot;
-    uint64_t high_bits;
-    struct QXLRam *ram_header;
-
-    outb(qxl->io_base + QXL_IO_RESET, 0);
-
-    ram_header = (void *)((unsigned long)qxl->ram + (unsigned long)qxl->rom->ram_header_offset);
-    
+    ioport_write(qxl, QXL_IO_RESET, 0);
     /* Mem slots */
     ErrorF ("slots start: %d, slots end: %d\n",
 	    qxl->rom->slots_start,
@@ -356,48 +494,24 @@ qxl_reset (qxl_screen_t *qxl)
     qxl->slot_gen_bits = qxl->rom->slot_gen_bits;
     qxl->slot_id_bits = qxl->rom->slot_id_bits;
     qxl->va_slot_mask = (~(uint64_t)0) >> (qxl->slot_id_bits + qxl->slot_gen_bits);
-    
+
     qxl->mem_slots = xnfalloc (qxl->n_mem_slots * sizeof (qxl_memslot_t));
-    
-    qxl->main_mem_slot = qxl->rom->slots_start;
-    slot = &qxl->mem_slots[qxl->main_mem_slot];
-    slot->start_phys_addr = (unsigned long)qxl->ram_physical;
-    slot->end_phys_addr =
-	(unsigned long)slot->start_phys_addr + (unsigned long)qxl->rom->num_pages * getpagesize();
-    slot->start_virt_addr = (uint64_t)(uintptr_t)qxl->ram;
-    slot->end_virt_addr = slot->start_virt_addr + (unsigned long)qxl->rom->num_pages * getpagesize();
-    
-    ram_header->mem_slot.mem_start = slot->start_phys_addr;
-    ram_header->mem_slot.mem_end = slot->end_phys_addr;
-    
-    outb (qxl->io_base + QXL_IO_MEMSLOT_ADD, qxl->main_mem_slot);
 
-    slot->generation = qxl->rom->slot_generation;
-    
-    high_bits = qxl->main_mem_slot << qxl->slot_gen_bits;
-    high_bits |= slot->generation;
-    high_bits <<= (64 - (qxl->slot_gen_bits + qxl->slot_id_bits));
-    slot->high_bits = high_bits;
-    
-    /* Vram slot */
-    qxl->vram_mem_slot = qxl->rom->slots_start + 1;
-    slot = &qxl->mem_slots[qxl->vram_mem_slot];
-    slot->start_phys_addr = (unsigned long)qxl->vram_physical;
-    slot->end_phys_addr = (unsigned long)qxl->vram_physical + (unsigned long)qxl->vram_size;
-    slot->start_virt_addr = (uint64_t)(uintptr_t)qxl->vram;
-    slot->end_virt_addr = (uint64_t)(uintptr_t)qxl->vram + (uint64_t)qxl->vram_size;
-
-    ram_header->mem_slot.mem_start = slot->start_phys_addr;
-    ram_header->mem_slot.mem_end = slot->end_phys_addr;
-
-    outb (qxl->io_base + QXL_IO_MEMSLOT_ADD, qxl->vram_mem_slot);
-
-    slot->generation = qxl->rom->slot_generation;
-    
-    high_bits = qxl->vram_mem_slot << qxl->slot_gen_bits;
-    high_bits |= slot->generation;
-    high_bits <<= (64 - (qxl->slot_gen_bits + qxl->slot_id_bits));
-    slot->high_bits = high_bits;
+#ifdef XSPICE
+    qxl->main_mem_slot = qxl->vram_mem_slot = setup_slot(qxl, 0, 0, ~0, 0, ~0);
+#else /* QXL */
+    qxl->main_mem_slot = setup_slot(qxl, 0,
+        (unsigned long)qxl->ram_physical,
+        (unsigned long)qxl->ram_physical + (unsigned long)qxl->rom->num_pages * getpagesize(),
+        (uint64_t)(uintptr_t)qxl->ram,
+        (uint64_t)(uintptr_t)qxl->ram + (unsigned long)qxl->rom->num_pages * getpagesize()
+    );
+    qxl->vram_mem_slot = setup_slot(qxl, 1,
+        (unsigned long)qxl->vram_physical,
+        (unsigned long)qxl->vram_physical + (unsigned long)qxl->vram_size,
+        (uint64_t)(uintptr_t)qxl->vram,
+        (uint64_t)(uintptr_t)qxl->vram + (uint64_t)qxl->vram_size);
+#endif
 }
 
 static void
@@ -824,6 +938,28 @@ setup_uxa (qxl_screen_t *qxl, ScreenPtr screen)
     return TRUE;
 }
 
+#ifdef XSPICE
+
+static void
+spiceqxl_screen_init(int scrnIndex, ScrnInfoPtr pScrn, qxl_screen_t *qxl)
+{
+    SpiceCoreInterface *core;
+
+    // Init spice
+    if (!qxl->spice_server) {
+        qxl->spice_server = xspice_get_spice_server();
+        xspice_set_spice_server_options(qxl->options);
+        core = basic_event_loop_init();
+        spice_server_init(qxl->spice_server, core);
+        qxl_add_spice_display_interface(qxl);
+        qxl->worker->start(qxl->worker);
+        qxl->worker_running = TRUE;
+    }
+    qxl->spice_server = qxl->spice_server;
+}
+
+#endif
+
 static Bool
 qxl_screen_init(int scrnIndex, ScreenPtr pScreen, int argc, char **argv)
 {
@@ -839,6 +975,9 @@ qxl_screen_init(int scrnIndex, ScreenPtr pScreen, int argc, char **argv)
     if (!qxl_map_memory(qxl, scrnIndex))
 	return FALSE;
 
+#ifdef XSPICE
+    spiceqxl_screen_init(scrnIndex, pScrn, qxl);
+#endif
     ram_header = (void *)((unsigned long)qxl->ram + (unsigned long)qxl->rom->ram_header_offset);
     
     printf ("ram_header at %d\n", qxl->rom->ram_header_offset);
@@ -903,18 +1042,20 @@ qxl_screen_init(int scrnIndex, ScreenPtr pScreen, int argc, char **argv)
     qxl_reset (qxl);
     ErrorF ("done reset\n");
 
+#ifndef XSPICE
     qxl->io_pages = (void *)((unsigned long)qxl->ram);
     qxl->io_pages_physical = (void *)((unsigned long)qxl->ram_physical);
+#endif
 
     qxl->command_ring = qxl_ring_create ((struct qxl_ring_header *)&(ram_header->cmd_ring),
 					 sizeof (struct QXLCommand),
-					 QXL_COMMAND_RING_SIZE, QXL_IO_NOTIFY_CMD);
+					 QXL_COMMAND_RING_SIZE, QXL_IO_NOTIFY_CMD, qxl);
     qxl->cursor_ring = qxl_ring_create ((struct qxl_ring_header *)&(ram_header->cursor_ring),
 					sizeof (struct QXLCommand),
-					QXL_CURSOR_RING_SIZE, QXL_IO_NOTIFY_CURSOR);
+					QXL_CURSOR_RING_SIZE, QXL_IO_NOTIFY_CURSOR, qxl);
     qxl->release_ring = qxl_ring_create ((struct qxl_ring_header *)&(ram_header->release_ring),
 					 sizeof (uint64_t),
-					 QXL_RELEASE_RING_SIZE, 0);
+					 QXL_RELEASE_RING_SIZE, 0, qxl);
 
     qxl->surface_cache = qxl_surface_cache_create (qxl);
     
@@ -1042,6 +1183,7 @@ print_modes (qxl_screen_t *qxl, int scrnIndex)
     }
 }
 
+#ifndef XSPICE
 static Bool
 qxl_check_device(ScrnInfoPtr pScrn, qxl_screen_t *qxl)
 {
@@ -1077,15 +1219,9 @@ qxl_check_device(ScrnInfoPtr pScrn, qxl_screen_t *qxl)
 
     xf86DrvMsg(scrnIndex, X_INFO, "Correct RAM signature %x\n",
 	       ram_header->magic);
-    
-    pScrn->videoRam = (rom->num_pages * 4096) / 1024;
-    
-    xf86DrvMsg(scrnIndex, X_INFO, "%d KB of video RAM\n", pScrn->videoRam);
-    
-    xf86DrvMsg(scrnIndex, X_INFO, "%d surfaces\n", rom->n_surfaces);
-    
     return TRUE;
 }
+#endif /* !XSPICE */
 
 static int
 qxl_find_native_mode(ScrnInfoPtr pScrn, DisplayModePtr p)
@@ -1203,11 +1339,14 @@ qxl_pre_init(ScrnInfoPtr pScrn, int flags)
     qxl = pScrn->driverPrivate;
 
     qxl->entity = xf86GetEntityInfo(pScrn->entityList[0]);
+    
+#ifndef XSPICE
     qxl->pci = xf86GetPciInfoForEntity(qxl->entity->index);
 #ifndef XSERVER_LIBPCIACCESS
     qxl->pci_tag = pciTag(qxl->pci->bus, qxl->pci->device, qxl->pci->func);
 #endif
-    
+#endif /* XSPICE */
+
     pScrn->monitor = pScrn->confScreen->monitor;
     
     if (!qxl_color_setup(pScrn))
@@ -1215,12 +1354,21 @@ qxl_pre_init(ScrnInfoPtr pScrn, int flags)
     
     /* option parsing and card differentiation */
     xf86CollectOptions(pScrn, NULL);
+    memcpy(qxl->options, DefaultOptions, sizeof(DefaultOptions));
+    xf86ProcessOptions(scrnIndex, pScrn->options, qxl->options);
     
     if (!qxl_map_memory(qxl, scrnIndex))
 	goto out;
     
+#ifndef XSPICE
     if (!qxl_check_device(pScrn, qxl))
 	goto out;
+#else
+    xspice_init_qxl_ram(qxl); /* initialize the rings */
+#endif
+    pScrn->videoRam = (qxl->rom->num_pages * 4096) / 1024;
+    xf86DrvMsg(scrnIndex, X_INFO, "%d KB of video RAM\n", pScrn->videoRam);
+    xf86DrvMsg(scrnIndex, X_INFO, "%d surfaces\n", qxl->rom->n_surfaces);
 
     /* ddc stuff here */
     
@@ -1293,18 +1441,23 @@ qxl_pre_init(ScrnInfoPtr pScrn, int flags)
     xf86PrintModes(pScrn);
     xf86SetDpi(pScrn, 0, 0);
     
-    if (!xf86LoadSubModule(pScrn, "fb") ||
-	!xf86LoadSubModule(pScrn, "ramdac") ||
-	!xf86LoadSubModule(pScrn, "vgahw"))
+    if (!xf86LoadSubModule(pScrn, "fb")
+#ifndef XSPICE
+	|| !xf86LoadSubModule(pScrn, "ramdac")
+	|| !xf86LoadSubModule(pScrn, "vgahw")
+#endif
+    )
     {
 	goto out;
     }
     
     print_modes (qxl, scrnIndex);
 
+#ifndef XSPICE
     /* VGA hardware initialisation */
     if (!vgaHWGetHWRec(pScrn))
         return FALSE;
+#endif
 
     /* hate */
     qxl_unmap_memory(qxl, scrnIndex);
@@ -1312,6 +1465,9 @@ qxl_pre_init(ScrnInfoPtr pScrn, int flags)
     CHECK_POINT();
     
     xf86DrvMsg(scrnIndex, X_INFO, "PreInit complete\n");
+#ifdef GIT_VERSION
+    xf86DrvMsg(scrnIndex, X_INFO, "git commit %s\n", GIT_VERSION);
+#endif
     return TRUE;
     
 out:
@@ -1323,6 +1479,7 @@ out:
     return FALSE;
 }
 
+#ifndef XSPICE
 #ifdef XSERVER_LIBPCIACCESS
 enum qxl_class
 {
@@ -1356,18 +1513,21 @@ static PciChipsets qxlPciChips[] =
     { -1, -1, RES_UNDEFINED }
 };
 #endif
+#endif /* !XSPICE */
 
 static void
 qxl_identify(int flags)
 {
+#ifndef XSPICE
     xf86PrintChipsets("qxl", "Driver for QXL virtual graphics", qxlChips);
+#endif
 }
 
 static void
 qxl_init_scrn(ScrnInfoPtr pScrn)
 {
     pScrn->driverVersion    = 0;
-    pScrn->driverName	    = pScrn->name = "qxl";
+    pScrn->driverName	    = pScrn->name = QXL_DRIVER_NAME;
     pScrn->PreInit	    = qxl_pre_init;
     pScrn->ScreenInit	    = qxl_screen_init;
     pScrn->SwitchMode	    = qxl_switch_mode;
@@ -1376,6 +1536,37 @@ qxl_init_scrn(ScrnInfoPtr pScrn)
     pScrn->LeaveVT	    = qxl_leave_vt;
 }
 
+#ifdef XSPICE
+static Bool
+qxl_probe(struct _DriverRec *drv, int flags)
+{
+    ScrnInfoPtr pScrn;
+    int entityIndex;
+    EntityInfoPtr pEnt;
+    GDevPtr* device;
+
+    if (flags & PROBE_DETECT) {
+        return TRUE;
+    }
+
+    pScrn = xf86AllocateScreen(drv, flags);
+    qxl_init_scrn(pScrn);
+
+    xf86MatchDevice(QXL_DRIVER_NAME, &device);
+    entityIndex = xf86ClaimNoSlot(drv, 0, device[0], TRUE);
+    pEnt = xf86GetEntityInfo(entityIndex);
+    pEnt->driver = drv;
+
+    xf86AddEntityToScreen(pScrn, entityIndex);
+
+    return TRUE;
+}
+static Bool qxl_driver_func(ScrnInfoPtr screen_info_ptr, xorgDriverFuncOp xorg_driver_func_op, pointer hw_flags)
+{
+    *(xorgHWFlags*)hw_flags = (xorgHWFlags)HW_SKIP_CONSOLE;
+    return TRUE;
+}
+#else /* normal, not XSPICE */
 #ifndef XSERVER_LIBPCIACCESS
 static Bool
 qxl_probe(DriverPtr drv, int flags)
@@ -1444,20 +1635,27 @@ qxl_pci_probe(DriverPtr drv, int entity, struct pci_device *dev, intptr_t match)
 #define qxl_probe NULL
 
 #endif
+#endif /* XSPICE */
 
 static DriverRec qxl_driver = {
     0,
-    "qxl",
+    QXL_DRIVER_NAME,
     qxl_identify,
     qxl_probe,
     NULL,
     NULL,
     0,
+#ifdef XSPICE
+    qxl_driver_func,
+    NULL,
+    NULL
+#else
     NULL,
 #ifdef XSERVER_LIBPCIACCESS
     qxl_device_match,
     qxl_pci_probe
 #endif
+#endif /* XSPICE */
 };
 
 static pointer
@@ -1468,6 +1666,9 @@ qxl_setup(pointer module, pointer opts, int *errmaj, int *errmin)
     if (!loaded) {
 	loaded = TRUE;
 	xf86AddDriver(&qxl_driver, module, HaveDriverFuncs);
+#ifdef XSPICE
+	xspice_add_input_drivers(module);
+#endif
 	return (void *)1;
     } else {
 	if (errmaj)
@@ -1477,7 +1678,7 @@ qxl_setup(pointer module, pointer opts, int *errmaj, int *errmin)
 }
 
 static XF86ModuleVersionInfo qxl_module_info = {
-    "qxl",
+    QXL_DRIVER_NAME,
     MODULEVENDORSTRING,
     MODINFOSTRING1,
     MODINFOSTRING2,
@@ -1489,7 +1690,13 @@ static XF86ModuleVersionInfo qxl_module_info = {
     { 0, 0, 0, 0 }
 };
 
-_X_EXPORT XF86ModuleData qxlModuleData = {
+_X_EXPORT XF86ModuleData
+#ifdef XSPICE
+spiceqxlModuleData
+#else
+qxlModuleData
+#endif
+= {
     &qxl_module_info,
     qxl_setup,
     NULL

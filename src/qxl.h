@@ -28,6 +28,9 @@
 #include <stdint.h>
 
 #include <spice/qxl_dev.h>
+#ifdef XSPICE
+#include <spice.h>
+#endif
 
 #include "compiler.h"
 #include "xf86.h"
@@ -40,17 +43,25 @@
 #include "xf86xv.h"
 #include "shadow.h"
 #include "micmap.h"
+#include "uxa/uxa.h"
+
+#ifndef XSPICE
 #ifdef XSERVER_PCIACCESS
 #include "pciaccess.h"
 #endif
 #include "fb.h"
-#include "uxa/uxa.h"
 #include "vgaHW.h"
+#endif /* XSPICE */
 
 #define hidden _X_HIDDEN
 
+#ifdef XSPICE
+#define QXL_NAME		"spiceqxl"
+#define QXL_DRIVER_NAME		"spiceqxl"
+#else
 #define QXL_NAME		"qxl"
 #define QXL_DRIVER_NAME		"qxl"
+#endif
 #define PCI_VENDOR_RED_HAT	0x1b36
 
 #define PCI_CHIP_QXL_0100	0x0100
@@ -82,6 +93,38 @@ typedef struct
 } qxl_memslot_t;
 
 typedef struct qxl_surface_t qxl_surface_t;
+
+/*
+ * Config Options
+ */
+
+enum {
+#ifdef XSPICE
+    OPTION_SPICE_PORT = 0,
+    OPTION_SPICE_TLS_PORT,
+    OPTION_SPICE_ADDR,
+    OPTION_SPICE_X509_DIR,
+    OPTION_SPICE_SASL,
+    OPTION_SPICE_AGENT_MOUSE,
+    OPTION_SPICE_DISABLE_TICKETING,
+    OPTION_SPICE_PASSWORD,
+    OPTION_SPICE_X509_KEY_FILE,
+    OPTION_SPICE_STREAMING_VIDEO,
+    OPTION_SPICE_PLAYBACK_COMPRESSION,
+    OPTION_SPICE_ZLIB_GLZ_WAN_COMPRESSION,
+    OPTION_SPICE_JPEG_WAN_COMPRESSION,
+    OPTION_SPICE_IMAGE_COMPRESSION,
+    OPTION_SPICE_DISABLE_COPY_PASTE,
+    OPTION_SPICE_IPV4_ONLY,
+    OPTION_SPICE_IPV6_ONLY,
+    OPTION_SPICE_X509_CERT_FILE,
+    OPTION_SPICE_X509_KEY_PASSWORD,
+    OPTION_SPICE_TLS_CIPHERS,
+    OPTION_SPICE_CACERT_FILE,
+    OPTION_SPICE_DH_FILE,
+#endif
+    OPTION_COUNT,
+};
 
 struct _qxl_screen_t
 {
@@ -120,9 +163,10 @@ struct _qxl_screen_t
     
     EntityInfoPtr		entity;
 
+#ifndef XSPICE
     void *			io_pages;
     void *			io_pages_physical;
-    
+
 #ifdef XSERVER_LIBPCIACCESS
     struct pci_device *		pci;
 #else
@@ -130,6 +174,7 @@ struct _qxl_screen_t
     PCITAG			pci_tag;
 #endif
     vgaRegRec                   vgaRegs;
+#endif /* XSPICE */
 
     uxa_driver_t *		uxa;
     
@@ -159,6 +204,35 @@ struct _qxl_screen_t
 
     /* Evacuated surfaces are stored here during VT switches */
     void *			vt_surfaces;
+
+    OptionInfoRec	options[OPTION_COUNT + 1];
+
+#ifdef XSPICE
+    /* XSpice specific */
+    struct QXLRom		shadow_rom;    /* Parameter RAM */
+    SpiceServer *       spice_server;
+    QXLWorker *         worker;
+    int                 worker_running;
+    QXLInstance         display_sin;
+    /* XSpice specific, dragged from the Device */
+    QXLReleaseInfo     *last_release;
+
+    uint32_t           cmdflags;
+    uint32_t           oom_running;
+    uint32_t           num_free_res; /* is having a release ring effective
+                                        for Xspice? */
+    /* This is only touched from red worker thread - do not access
+     * from Xorg threads. */
+    struct guest_primary {
+        QXLSurfaceCreate surface;
+        uint32_t       commands;
+        uint32_t       resized;
+        int32_t        stride;
+        uint32_t       bits_pp;
+        uint32_t       bytes_pp;
+        uint8_t        *data, *flipped;
+    } guest_primary;
+#endif /* XSPICE */
 };
 
 static inline uint64_t
@@ -208,7 +282,8 @@ void              qxl_cursor_init        (ScreenPtr               pScreen);
 struct qxl_ring * qxl_ring_create      (struct qxl_ring_header *header,
 					int                     element_size,
 					int                     n_elements,
-					int                     prod_notify);
+					int                     prod_notify,
+					qxl_screen_t            *qxl);
 void              qxl_ring_push        (struct qxl_ring        *ring,
 					const void             *element);
 Bool              qxl_ring_pop         (struct qxl_ring        *ring,
@@ -334,5 +409,39 @@ void              qxl_mem_free_all     (struct qxl_mem         *mem);
 void *            qxl_allocnf          (qxl_screen_t           *qxl,
 					unsigned long           size);
 int		   qxl_garbage_collect (qxl_screen_t *qxl);
+
+#ifdef XSPICE
+/* device to spice-server, now xspice to spice-server */
+void ioport_write(qxl_screen_t *qxl, uint32_t io_port, uint32_t val);
+#else
+static inline void ioport_write(qxl_screen_t *qxl, int port, int val)
+{
+    outb(qxl->io_base + port, val);
+}
+#endif
+
+#ifdef XSPICE
+
+#define MEMSLOT_GROUP 0
+#define NUM_MEMSLOTS_GROUPS 1
+
+// Taken from qemu's qxl.c, not sure the values make sense? we
+// only have a single slot, and it is never changed after being added,
+// so not a problem?
+#define NUM_MEMSLOTS 8
+#define MEMSLOT_GENERATION_BITS 8
+#define MEMSLOT_SLOT_BITS 1
+
+// qemu/cpu-all.h
+#define TARGET_PAGE_SIZE (1 << TARGET_PAGE_BITS)
+// qemu/target-i386/cpu.h
+#define TARGET_PAGE_BITS 12
+
+#define NUM_SURFACES 1024
+
+/* initializes if required and returns the server singleton */
+SpiceServer *xspice_get_spice_server(void);
+
+#endif /* XSPICE */
 
 #endif // QXL_H
