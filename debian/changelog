@@ -1,4 +1,4 @@
-xserver-xorg-video-qxl (0.0.14-1) UNRELEASED; urgency=low
+xserver-xorg-video-qxl (0.0.14-1) unstable; urgency=low
 
   * New upstream release:
     - Fix VT switching issues.
@@ -8,7 +8,7 @@ xserver-xorg-video-qxl (0.0.14-1) UNRELEASED; urgency=low
   * Fix typo and missing space in long description.
   * Add myself to Uploaders.
 
- -- Cyril Brulebois <kibi@debian.org>  Fri, 15 Jul 2011 09:50:38 +0200
+ -- Cyril Brulebois <kibi@debian.org>  Sat, 23 Jul 2011 12:15:54 +0200
 
 xserver-xorg-video-qxl (0.0.13-1) unstable; urgency=low
 
