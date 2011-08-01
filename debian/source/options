@@ -1,1 +1,1 @@
-diff-ignore = autogen.sh|.git
+diff-ignore = autogen.sh|.git|TODO.xspice
