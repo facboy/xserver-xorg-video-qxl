@@ -1,3 +1,347 @@
+commit dd90fa9277283b4806aba307ca952bea0402b534
+Author: Alon Levy <alevy@redhat.com>
+Date:   Sat Jul 23 12:55:42 2011 +0300
+
+    0.0.16
+    
+    Brown paper bag release: fix scripts/xspice to run.
+    
+    Did a few more fixes in the same time:
+     less verbose error messages by default
+     add missing command line in xspice for --x509-cert-file
+     check for existance of certificates before running Xorg
+
+commit 7c4804541084ba8f1d11c4c86f0276235520c7be
+Author: Alon Levy <alevy@redhat.com>
+Date:   Sat Jul 23 13:36:10 2011 +0300
+
+    scripts/xspice: prevent running with missing certificates
+    
+    since spice-server aborts if it is missing any of the ca-cert, server cert
+    or server key, when running with --tls-port, check for them ourselves first.
+    
+    also add missing --x509-cert-file switch, and add --disable-ticketing
+    to example in --help.
+
+commit 432c5870104f583166234b9655628f359983bbfa
+Author: Alon Levy <alevy@redhat.com>
+Date:   Sat Jul 23 13:11:54 2011 +0300
+
+    spiceqxl_io_port: make dprint silent
+    
+    and read XSPICE_IO_PORT_DEBUG_LEVEL environment variable.
+
+commit 345c0b9818d5624858cfeb6b9ddba92d4eb64a0d
+Author: Alon Levy <alevy@redhat.com>
+Date:   Sat Jul 23 13:11:19 2011 +0300
+
+    scripts/xspice: fix --cgdb
+
+commit a596303cb1f6bfcbb3ea9575faa8e984c52eb5a8
+Author: Alon Levy <alevy@redhat.com>
+Date:   Sat Jul 23 12:55:10 2011 +0300
+
+    scripts/xspice: fix to run
+
+commit ec418d246d083cb5c2317d2f5f6a775de252a5b9
+Author: Alon Levy <alevy@redhat.com>
+Date:   Fri Jul 22 03:53:20 2011 +0300
+
+    0.0.15: now with xspice!
+    
+    xspice is a new X server that is also a Spice server. See
+    README.xspice for more information.
+    
+     + added configure options to accomodate an extra driver (spiceqxl_drv.so)
+       built alongside existing qxl_drv.so
+     + XSPICE define where the code could not be split easily (qxl_driver.c
+       and qxl.h)
+     - no functional changes to driver.
+     + some small cleanups (still too many warnings)
+
+commit a84cc00d777ee2e078eae94f3f65f8174dba9bdd
+Author: Alon Levy <alevy@redhat.com>
+Date:   Fri Jul 22 04:33:40 2011 +0300
+
+    add missing copyright headers
+
+commit 51003b11a0ad3ecccdb07319398ca7fb43af5271
+Author: Alon Levy <alevy@redhat.com>
+Date:   Fri Jul 22 02:25:46 2011 +0300
+
+    xspice: fix make distcheck
+
+commit fa1700964a3da4cba85f61f4f563d39d09cd4cd4
+Author: Alon Levy <alevy@redhat.com>
+Date:   Fri Jul 22 01:20:58 2011 +0300
+
+    xspice: add most options existing in qemu
+    
+    Add (copy from ui/spice-core.c) most of the options from qemu for
+    spice server. Notable exception is per channel port selection, so
+    the only sure way to verify all channels use the secure port (or
+    the normal one) is to not set the port (or not set the secure port).
+    
+    About options: All options are settable either from environment
+    variables called XSPICE_SOMETHING or by a SpiceSomething parameter
+    in the Device section of the xorg configuration file. The xspice wrapper
+    added later makes use of those environment variables and gives a
+    more standard command line parameter interface.
+
+commit e289df207b63064d10455fec6e406171711605d5
+Author: Alon Levy <alevy@redhat.com>
+Date:   Fri Jul 22 01:26:57 2011 +0300
+
+    spiceqxl_io_port: s/init_qxl_ram/xspice_init_qxl_ram/
+
+commit e36912352b34f711dedc007d9b07eff8427bf5d0
+Author: Alon Levy <alevy@redhat.com>
+Date:   Fri Jul 22 01:25:21 2011 +0300
+
+    xspice/qxl_driver: fix implicitly defined function warning
+
+commit bd39af72b31c9855362161d9e08c0b2e788dc143
+Author: Alon Levy <alevy@redhat.com>
+Date:   Sun Jun 26 18:39:41 2011 +0200
+
+    xspice: qxl_unmap_memory: stop worker and track worker status
+    
+    stop the worker thread and track the status, ignoring io requests (i.e.
+    prevent red_dispatcher writes to red_worker) if red_worker is stopped.
+    
+    This fixes spice red_worker asserts from actions attepted after X
+    has destroyed a screen. X runs in a loop destroying and recreating screens
+    multiple times during the process lifetime, whenever the last X client
+    has exited.
+    
+    Note that the spice server is kept up during a X screen restart. This is
+    on purpose, to avoid a spice-client closing when doing a window manager
+    restart. Cleanup of the spice-server on atexit - still to do.
+
+commit c4aff2b753e80e49f88e95ea02d1ff1de21a2391
+Author: Alon Levy <alevy@redhat.com>
+Date:   Wed Apr 27 18:44:29 2011 +0300
+
+    xspice/qxl_ring: yield when ring is full
+
+commit ee0e638e119d54fb3f9eda6de18f8fb3884d8509
+Author: Alon Levy <alevy@redhat.com>
+Date:   Wed Apr 27 18:22:28 2011 +0300
+
+    xspice: README, TODO, config, xspice launcher script
+    
+    xspice is placed under scripts, adding a new Makefile.am, only
+    installed if --enable-xspice.
+    spiceqxl.xorg.conf.example is placed under examples to be installed
+    to share/doc if --enable-xspice.
+
+commit 4d04f2bb72bf8d7aff6f33d2dd77d8c5c0e77f83
+Author: Alon Levy <alevy@redhat.com>
+Date:   Wed Apr 27 18:20:09 2011 +0300
+
+    xspice: add inputs (mouse and keyboard)
+    
+    uses xf86AddInputDriver, xf86PostButtonEvent, xf86PostMotionEvent and xf86PostKeyboardEvent
+    
+    reused xspice_get_spice_server to access the single spice server instance.
+
+commit c54fef726efbf6c2f00e27b85a46a47741af1786
+Author: Alon Levy <alevy@redhat.com>
+Date:   Wed Apr 27 18:24:38 2011 +0300
+
+    xspice: implement ioport_write
+
+commit c48574980b1c0924e04a93631ea8fda09f6487da
+Author: Alon Levy <alevy@redhat.com>
+Date:   Wed Apr 27 18:18:57 2011 +0300
+
+    xspice: add init_qxl_ram
+
+commit 0848656de81df95a456c740d59b05ab51a71b425
+Author: Alon Levy <alevy@redhat.com>
+Date:   Wed Apr 27 17:58:17 2011 +0300
+
+    xspice: add display interface
+
+commit 6c92a6e04e7bc9fb86bacc426ee63e810f462f61
+Author: Alon Levy <alevy@redhat.com>
+Date:   Wed Apr 27 17:48:15 2011 +0300
+
+    xspice: init spice server, add main loop
+    
+    Initialize a SpiceServer instance, and implement SpiceCoreInterface,
+    that is fd read, write notification and watchs (timers).
+    
+    The SpiceServer instance creation is wrapped in xspice_get_spice_server to allow
+    access from the pointer and keyboard drivers introduced later.
+    
+    The fd implementation is off because Xserver doesn't allow us to be
+    notified on write unblock, only read. Workaround is to poll.
+
+commit 2e869f6489113a07300c937e6103a5e019b68f93
+Author: Alon Levy <alevy@redhat.com>
+Date:   Wed Apr 27 17:45:31 2011 +0300
+
+    xspice: add SpicePort config option
+
+commit 3b99e0e25337aa8aecdc7b414ca8021cb12628e1
+Author: Alon Levy <alevy@redhat.com>
+Date:   Wed Apr 27 17:25:42 2011 +0300
+
+    xspice: implement map_helper, unmap_helper, add init_qxl_rom
+    
+    Memory is taken from malloc instead of from the pci bar.
+    
+    Adds shadow_rom to qxl_screen_t.
+    
+    Introduces init_qxl_rom, which is directly taken from the qxl device
+    in qemu. Plenty of TODO's added in this commit about various constants
+    and about factoring out the code to not do this copy paste from qemu.
+
+commit 267ce8421450bdbe99df8ac0c0b55482a19203ef
+Author: Alon Levy <alevy@redhat.com>
+Date:   Wed Apr 27 17:14:27 2011 +0300
+
+    xspice: use spiceqxlModuleData as entry point
+
+commit 76fd7158eb521eb12a18835d7c4f1d3b5f156796
+Author: Alon Levy <alevy@redhat.com>
+Date:   Wed Apr 27 17:10:57 2011 +0300
+
+    xspice: don't load ramdac and vgahw sub modules
+
+commit 00cc49ce4d8ce48b1c29e9a34c10db410483d4b2
+Author: Alon Levy <alevy@redhat.com>
+Date:   Wed Apr 27 17:10:45 2011 +0300
+
+    xspice: allocate a single slot
+
+commit f3ca425f08275de670c963047a3d86e1fe481b2b
+Author: Alon Levy <alevy@redhat.com>
+Date:   Wed Apr 27 17:01:38 2011 +0300
+
+    xspice: stop using pci and vga
+    
+    This ifdefs out all the parts in qxl_driver.c that are pci device specific
+    and are not required by xspice. No functional change. The resulting spiceqxl_drv.so
+    doesn't run.
+
+commit 9e30b11be0134713922555a710b6be0e664b3af2
+Author: Alon Levy <alevy@redhat.com>
+Date:   Wed Apr 27 16:30:21 2011 +0300
+
+    xspice: add spiceqxl_io_port, empty implementation
+
+commit d7c3e279081c932f30231a060feb5df3460055b2
+Author: Alon Levy <alevy@redhat.com>
+Date:   Wed Apr 27 16:11:09 2011 +0300
+
+    xspice: use spiceqxl as name of xspice driver
+    
+    Fixes a few places that have hardcoded "qxl" to use the already defined
+    QXL_DRIVER_NAME.
+
+commit f9d4fc347ba7927d4a723c3226f215bdcaab126e
+Author: Alon Levy <alevy@redhat.com>
+Date:   Wed Apr 27 16:04:52 2011 +0300
+
+    xspice: add configure option and make target
+    
+    adds --enable-xspice[=no|yes|only], which builds an spiceqxl_drv.so target, and
+    defines SUPPORT_XSPICE. Fails build if spice-server not found. If you
+    set to only it will not build the qxl driver. This is useful for easier
+    packaging by not creating unpackaged artifacts.
+
+commit e76334e08ca939f1963ce7ece0e60a3d12247467
+Author: Alon Levy <alevy@redhat.com>
+Date:   Tue Jul 19 09:33:43 2011 +0300
+
+    configure.ac: show configure options
+
+commit a8e911bf3862a29c2ef9648699448c40f206401a
+Author: Alon Levy <alevy@redhat.com>
+Date:   Wed Apr 27 14:41:24 2011 +0300
+
+    qxl_driver: introduce helpers for memory map and unmap
+    
+    qxl_map_memory_helper and qxl_unmap_memory_helper introduced, here as
+    a simple split, later different implementation if XSPICE defined will
+    be added. Nicer then putting an ifdef inside the map/unmap functions.
+
+commit edf1a6596388b1e5b871cb1be4a1f7c6ba75e4c1
+Author: Alon Levy <alevy@redhat.com>
+Date:   Wed Apr 27 14:29:46 2011 +0300
+
+    qxl_driver: add setup_slot helper
+    
+    used in qxl_reset. Later ifdefed with XSPICE, which only uses a single
+    slot covering all memory (really it should just avoid calling the translation
+    mechanism, but for now this is simple enough).
+
+commit fc87a47c7fb61c2a5c3c8563b6fd1a500541649a
+Author: Alon Levy <alevy@redhat.com>
+Date:   Wed Apr 27 14:34:51 2011 +0300
+
+    add config options (empty for now)
+
+commit 141154b6b5cf3abf7855477b72edc1618a0188e1
+Author: Alon Levy <alevy@redhat.com>
+Date:   Wed Apr 27 14:22:09 2011 +0300
+
+    partially replace outb with ioport_write
+    
+    replace everywhere it is needed for xspice - places left out are ifdefed
+    out later based on the same define mentioned in qxl.h, XSPICE.
+
+commit e59bb1a7ea16751c185a9ab33d93f7242118cb4c
+Author: Alon Levy <alevy@redhat.com>
+Date:   Wed Apr 27 14:13:30 2011 +0300
+
+    qxl_ring: keep qxl pointer
+    
+    Add a qxl_screen_t* member to qxl_ring to make generelizing outb to
+    ioport_write easier in the next patch. This means we do an extra deref
+    and addition for every outb, but it means the code becomes simpler for
+    doing outb in qxl_drv.so and a function call for spiceqxl_drv.so
+
+commit 3c6b36fab37e3d5ab66d0080bd086eaff9778ec6
+Author: Alon Levy <alevy@redhat.com>
+Date:   Fri Jul 22 03:43:01 2011 +0300
+
+    qxl: bump spice-protocol to 0.8.1 for RINGs size defines
+
+commit 698d12e3f9c4b2c25f5730308203eae3f031d6e0
+Author: Alon Levy <alevy@redhat.com>
+Date:   Tue May 24 14:27:22 2011 +0300
+
+    log git commit if any during load
+
+commit 5af8fd656deba5e2ac3d9fab161ff7cc80a68ec5
+Author: Alon Levy <alevy@redhat.com>
+Date:   Tue May 24 11:17:02 2011 +0300
+
+    configure.ac: remove unused DRIVER_NAME
+
+commit 2a206fb4c4fdc7bb09e0b1e6cd6c4111c9268095
+Author: Alon Levy <alevy@redhat.com>
+Date:   Fri Jul 22 01:27:26 2011 +0300
+
+    qxl_surface: fix unused print_region warning
+    
+    introduced a define for enableing it, DEBUG_REGIONS.
+
+commit ce5507756e87a73bc6275ac275073932cd122583
+Author: Søren Sandmann Pedersen <ssp@redhat.com>
+Date:   Fri Jul 15 11:00:51 2011 -0400
+
+    Revert "use spice-protocol defines for ring sizes"
+    
+    This reverts commit 9ee2aa1ccefe1f3fecaf481f38581c9b0f201ef4.
+    
+    Conflicts:
+    
+    	src/qxl_driver.c
+
 commit 9b915fab9d29f66b825d7a46e158f026f10a41dc
 Author: Søren Sandmann Pedersen <ssp@redhat.com>
 Date:   Thu Jul 14 13:59:55 2011 -0400
