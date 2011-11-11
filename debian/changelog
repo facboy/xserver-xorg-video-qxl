@@ -1,9 +1,10 @@
 xserver-xorg-video-qxl (0.0.16-1) unstable; urgency=low
 
+  [ Liang Guo ]
   * New upstream release
   * Temporarily ignore TODO.xspice
 
- -- Liang Guo <bluestonechina@gmail.com>  Mon, 01 Aug 2011 22:26:11 +0800
+ -- Cyril Brulebois <kibi@debian.org>  Sat, 12 Nov 2011 00:16:28 +0100
 
 xserver-xorg-video-qxl (0.0.14-1) unstable; urgency=low
 
