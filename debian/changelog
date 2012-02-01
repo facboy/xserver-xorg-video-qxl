@@ -1,3 +1,11 @@
+xserver-xorg-video-qxl (0.0.16-2) unstable; urgency=low
+
+  [Serge Hallyn]
+  * Add translate-the-access-region.patch(Closes: #655318)
+  * Add debug package
+
+ -- Liang Guo <bluestonechina@gmail.com>  Wed, 01 Feb 2012 18:01:19 +0800
+
 xserver-xorg-video-qxl (0.0.16-1) unstable; urgency=low
 
   [ Liang Guo ]

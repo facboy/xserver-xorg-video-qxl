@@ -1,5 +1,9 @@
 #!/usr/bin/make -f
 
+.PHONY: override_dh_strip
+override_dh_strip:
+	dh_strip --dbg-package=xserver-xorg-video-qxl-dbg
+
 # Install in debian/tmp to retain control through dh_install:
 override_dh_auto_install:
 	dh_auto_install --destdir=debian/tmp
