@@ -1,3 +1,9 @@
+xserver-xorg-video-qxl (0.0.16-3) UNRELEASED; urgency=low
+
+  * Fix typo in the debug package's description.
+
+ -- Cyril Brulebois <kibi@debian.org>  Thu, 02 Feb 2012 17:49:19 +0100
+
 xserver-xorg-video-qxl (0.0.16-2) unstable; urgency=low
 
   [Serge Hallyn]
