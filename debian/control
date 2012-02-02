@@ -50,4 +50,4 @@ Description: X.Org X server -- QXL display driver (debugging symbols)
  running inside a RedHat Enterprise Virtualization (RHEV) environment, or
  other SPICE-compatible KVM/Qemu emulator. 
  .
- This package contains the debugging symbols for this driver
+ This package contains the debugging symbols for this driver.
