@@ -44,12 +44,10 @@ Package: xserver-xorg-video-qxl-dbg
 Architecture: any
 Depends: ${shlibs:Depends}, ${misc:Depends}, xserver-xorg-video-qxl (= ${binary:Version})
 Section: debug
-Description: X.Org X server -- QXL display driver
+Priority: extra
+Description: X.Org X server -- QXL display drive (debugging symbols)r
  This package provides the driver for QXL video device, i.e. if Linux is 
  running inside a RedHat Enterprise Virtualization (RHEV) environment, or
  other SPICE-compatible KVM/Qemu emulator. 
  .
- More information about X.Org can be found at:
- <URL:http://www.X.org>
- .
- This package contains the debugging symbols
+ This package contains the debugging symbols for this driver
