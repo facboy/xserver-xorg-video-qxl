@@ -23,7 +23,7 @@
 # Initialize Autoconf
 AC_PREREQ([2.60])
 AC_INIT([xf86-video-qxl],
-        [0.0.16],
+        [0.0.17],
         [https://bugs.freedesktop.org/enter_bug.cgi?product=xorg],
         [xf86-video-qxl])
 AC_CONFIG_SRCDIR([Makefile.am])
@@ -110,7 +110,7 @@ PKG_CHECK_MODULES([SPICE_PROTOCOL], [spice-protocol >= 0.8.1])
 AC_CHECK_FILE(.git, [
     GIT_VERSION=`git log -1 --format=%h`
     AC_DEFINE_UNQUOTED([GIT_VERSION], ["$GIT_VERSION"], [Defined if building from git])
-    ], []
+    ]
 )
 
 AC_CONFIG_FILES([

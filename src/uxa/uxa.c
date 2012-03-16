@@ -143,31 +143,30 @@ Bool uxa_prepare_access(DrawablePtr pDrawable, RegionPtr region, uxa_access_t ac
 {
 	ScreenPtr pScreen = pDrawable->pScreen;
 	uxa_screen_t *uxa_screen = uxa_get_screen(pScreen);
-	PixmapPtr pPixmap = uxa_get_drawable_pixmap(pDrawable);
-	Bool offscreen = uxa_pixmap_is_offscreen(pPixmap);
+	int xoff, yoff;
+	PixmapPtr pPixmap = uxa_get_offscreen_pixmap(pDrawable, &xoff, &yoff);
 	BoxRec box;
 	RegionRec region_rec;
 	Bool result;
 
-	if (!offscreen)
+	if (!pPixmap)
 	    return TRUE;
 
-	box.x1 = 0;
-	box.y1 = 0;
-	box.x2 = pPixmap->drawable.width;
-	box.y2 = pPixmap->drawable.height;
-	
-	REGION_INIT (pScreen, &region_rec, &box, 1);
 	if (!region)
-	    region = &region_rec;
+	{
+	    box.x1 = 0;
+	    box.y1 = 0;
+	    box.x2 = pDrawable->width;
+	    box.y2 = pDrawable->height;
 
-#if 0
-	/* Confine to the size of the drawable pixmap. The original
-	 * drawable may be bigger than the underlying one. For example,
-	 * the root window might be bigger than the screen pixmap.
-	 */
-	REGION_INTERSECT (pScreen, region, region, &region_rec);
-#endif
+	    REGION_INIT (pScreen, &region_rec, &box, 1);
+	    region = &region_rec;
+	}
+	else
+	{
+	    /* The driver expects a region in drawable coordinates */
+	    REGION_TRANSLATE (pScreen, region, xoff, yoff);
+	}
 	
 	result = TRUE;
 

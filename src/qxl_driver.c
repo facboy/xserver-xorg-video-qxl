@@ -36,6 +36,7 @@
 #include <stdlib.h>
 #include "qxl.h"
 #include "assert.h"
+#include "qxl_option_helpers.h"
 
 #ifdef XSPICE
 #include "spiceqxl_driver.h"
@@ -46,12 +47,20 @@
 #include "spiceqxl_spice_server.h"
 #endif /* XSPICE */
 
+extern void compat_init_scrn(ScrnInfoPtr);
+
 #if 0
 #define CHECK_POINT() ErrorF ("%s: %d  (%s)\n", __FILE__, __LINE__, __FUNCTION__);
 #endif
 #define CHECK_POINT()
 
 const OptionInfoRec DefaultOptions[] = {
+    { OPTION_ENABLE_IMAGE_CACHE,
+        "EnableImageCache",    OPTV_BOOLEAN, { 0 }, TRUE },
+    { OPTION_ENABLE_FALLBACK_CACHE,
+        "EnableFallbackCache", OPTV_BOOLEAN, { 0 }, TRUE },
+    { OPTION_ENABLE_SURFACES,
+        "EnableSurfaces",	   OPTV_BOOLEAN, { 0 }, TRUE },
 #ifdef XSPICE
     { OPTION_SPICE_PORT,
         "SpicePort",                OPTV_INTEGER,   {5900}, FALSE },
@@ -99,8 +108,73 @@ const OptionInfoRec DefaultOptions[] = {
     { OPTION_SPICE_DH_FILE,
         "SpiceDhFile",              OPTV_STRING,    {0}, FALSE},
 #endif
+
     { -1, NULL, OPTV_NONE, {0}, FALSE }
 };
+
+static const OptionInfoRec *
+qxl_available_options (int chipid, int busid)
+{
+    return DefaultOptions;
+}
+
+static void qxl_wait_for_io_command(qxl_screen_t *qxl)
+{
+    struct QXLRam *ram_header = (void *)(
+        (unsigned long)qxl->ram + qxl->rom->ram_header_offset);
+
+    while (!(ram_header->int_pending & QXL_INTERRUPT_IO_CMD)) {
+        usleep(1);
+    }
+    ram_header->int_pending &= ~QXL_INTERRUPT_IO_CMD;
+}
+
+void qxl_update_area(qxl_screen_t *qxl)
+{
+#ifndef XSPICE
+    if (qxl->pci->revision >= 3) {
+        ioport_write(qxl, QXL_IO_UPDATE_AREA_ASYNC, 0);
+        qxl_wait_for_io_command(qxl);
+    } else {
+        ioport_write(qxl, QXL_IO_UPDATE_AREA, 0);
+    }
+#else
+    ioport_write(qxl, QXL_IO_UPDATE_AREA, 0);
+#endif
+}
+
+void qxl_memslot_add(qxl_screen_t *qxl, uint8_t id)
+{
+#ifndef XSPICE
+    if (qxl->pci->revision >= 3) {
+        ioport_write(qxl, QXL_IO_MEMSLOT_ADD_ASYNC, id);
+        qxl_wait_for_io_command(qxl);
+    } else {
+        ioport_write(qxl, QXL_IO_MEMSLOT_ADD, id);
+    }
+#else
+    ioport_write(qxl, QXL_IO_MEMSLOT_ADD, id);
+#endif
+}
+
+void qxl_create_primary(qxl_screen_t *qxl)
+{
+#ifndef XSPICE
+    if (qxl->pci->revision >= 3) {
+        ioport_write(qxl, QXL_IO_CREATE_PRIMARY_ASYNC, 0);
+        qxl_wait_for_io_command(qxl);
+    } else {
+        ioport_write(qxl, QXL_IO_CREATE_PRIMARY, 0);
+    }
+#else
+    ioport_write(qxl, QXL_IO_CREATE_PRIMARY, 0);
+#endif
+}
+
+void qxl_notify_oom(qxl_screen_t *qxl)
+{
+    ioport_write(qxl, QXL_IO_NOTIFY_OOM, 0);
+}
 
 int
 qxl_garbage_collect (qxl_screen_t *qxl)
@@ -190,8 +264,8 @@ qxl_usleep (int useconds)
 int
 qxl_handle_oom (qxl_screen_t *qxl)
 {
-    ioport_write(qxl, QXL_IO_NOTIFY_OOM, 0);
-    
+    qxl_notify_oom(qxl);
+
 #if 0
     ErrorF (".");
     qxl_usleep (10000);
@@ -228,7 +302,7 @@ qxl_allocnf (qxl_screen_t *qxl, unsigned long size)
 	ram_header->update_area.right = qxl->virtual_x;
 	ram_header->update_surface = 0;		/* Only primary for now */
 	
-	ioport_write(qxl, QXL_IO_UPDATE_AREA, 0);
+        qxl_update_area(qxl);
 	
 #if 0
  	ErrorF ("eliminated memory (%d)\n", nth_oom++);
@@ -409,7 +483,8 @@ qxl_save_state(ScrnInfoPtr pScrn)
 {
     qxl_screen_t *qxl = pScrn->driverPrivate;
 
-    vgaHWSaveFonts(pScrn, &qxl->vgaRegs);
+    if (xf86IsPrimaryPci (qxl->pci))
+        vgaHWSaveFonts(pScrn, &qxl->vgaRegs);
 }
 
 static void
@@ -417,36 +492,10 @@ qxl_restore_state(ScrnInfoPtr pScrn)
 {
     qxl_screen_t *qxl = pScrn->driverPrivate;
 
-    vgaHWRestoreFonts(pScrn, &qxl->vgaRegs);
+    if (xf86IsPrimaryPci (qxl->pci))
+        vgaHWRestoreFonts(pScrn, &qxl->vgaRegs);
 }
 #endif /* XSPICE */
-
-static Bool
-qxl_close_screen(int scrnIndex, ScreenPtr pScreen)
-{
-    ScrnInfoPtr pScrn = xf86Screens[scrnIndex];
-    qxl_screen_t *qxl = pScrn->driverPrivate;
-    Bool result;
-    
-    ErrorF ("Freeing %p\n", qxl->fb);
-    free(qxl->fb);
-    qxl->fb = NULL;
-    
-    pScreen->CreateScreenResources = qxl->create_screen_resources;
-    pScreen->CloseScreen = qxl->close_screen;
-    
-    
-
-    result = pScreen->CloseScreen(scrnIndex, pScreen);
-
-    if (pScrn->vtSema) {
-        qxl_restore_state(pScrn);
-	qxl_unmap_memory(qxl, scrnIndex);
-    }
-    pScrn->vtSema = FALSE;
-
-    return result;
-}
 
 static uint8_t
 setup_slot(qxl_screen_t *qxl, uint8_t slot_index_offset,
@@ -469,7 +518,7 @@ setup_slot(qxl_screen_t *qxl, uint8_t slot_index_offset,
     ram_header->mem_slot.mem_start = slot->start_phys_addr;
     ram_header->mem_slot.mem_end = slot->end_phys_addr;
 
-    ioport_write(qxl, QXL_IO_MEMSLOT_ADD, slot_index);
+    qxl_memslot_add(qxl, slot_index);
 
     slot->generation = qxl->rom->slot_generation;
     
@@ -512,6 +561,37 @@ qxl_reset (qxl_screen_t *qxl)
         (uint64_t)(uintptr_t)qxl->vram,
         (uint64_t)(uintptr_t)qxl->vram + (uint64_t)qxl->vram_size);
 #endif
+}
+
+static Bool
+qxl_close_screen(int scrnIndex, ScreenPtr pScreen)
+{
+    ScrnInfoPtr pScrn = xf86Screens[scrnIndex];
+    qxl_screen_t *qxl = pScrn->driverPrivate;
+    Bool result;
+    
+    ErrorF ("Freeing %p\n", qxl->fb);
+    free(qxl->fb);
+    qxl->fb = NULL;
+    
+    pScreen->CreateScreenResources = qxl->create_screen_resources;
+    pScreen->CloseScreen = qxl->close_screen;
+    
+    result = pScreen->CloseScreen(scrnIndex, pScreen);
+
+#ifndef XSPICE
+    if (!xf86IsPrimaryPci (qxl->pci) && qxl->primary)
+       qxl_reset (qxl);
+#endif
+    
+    if (pScrn->vtSema)
+    {
+        qxl_restore_state(pScrn);
+	qxl_unmap_memory(qxl, scrnIndex);
+    }
+    pScrn->vtSema = FALSE;
+
+    return result;
 }
 
 static void
@@ -727,9 +807,6 @@ qxl_check_copy (PixmapPtr source, PixmapPtr dest,
 	return FALSE;
     }
     
-    if (!get_surface (source) || !get_surface (dest))
-	return FALSE;
-
     return TRUE;
 }
 
@@ -1325,9 +1402,15 @@ qxl_pre_init(ScrnInfoPtr pScrn, int flags)
     int *linePitches = NULL;
     DisplayModePtr mode;
     unsigned int max_x = 0, max_y = 0;
+
+    /* In X server 1.7.5, Xorg -configure will cause this
+     * function to get called without a confScreen.
+     */
+    if (!pScrn->confScreen)
+	return FALSE;
     
     CHECK_POINT();
-    
+
     /* zaphod mode is for suckers and i choose not to implement it */
     if (xf86IsEntityShared(pScrn->entityList[0])) {
 	xf86DrvMsg(scrnIndex, X_ERROR, "No Zaphod mode for you\n");
@@ -1356,6 +1439,20 @@ qxl_pre_init(ScrnInfoPtr pScrn, int flags)
     xf86CollectOptions(pScrn, NULL);
     memcpy(qxl->options, DefaultOptions, sizeof(DefaultOptions));
     xf86ProcessOptions(scrnIndex, pScrn->options, qxl->options);
+
+    qxl->enable_image_cache =
+	xf86ReturnOptValBool (qxl->options, OPTION_ENABLE_IMAGE_CACHE, TRUE);
+    qxl->enable_fallback_cache =
+	xf86ReturnOptValBool (qxl->options, OPTION_ENABLE_FALLBACK_CACHE, TRUE);
+    qxl->enable_surfaces =
+	xf86ReturnOptValBool (qxl->options, OPTION_ENABLE_SURFACES, TRUE);
+
+    xf86DrvMsg(scrnIndex, X_INFO, "Offscreen Surfaces: %s\n",
+	       qxl->enable_surfaces? "Enabled" : "Disabled");
+    xf86DrvMsg(scrnIndex, X_INFO, "Image Cache: %s\n",
+	       qxl->enable_image_cache? "Enabled" : "Disabled");
+    xf86DrvMsg(scrnIndex, X_INFO, "Fallback Cache: %s\n",
+	       qxl->enable_fallback_cache? "Enabled" : "Disabled");
     
     if (!qxl_map_memory(qxl, scrnIndex))
 	goto out;
@@ -1457,6 +1554,7 @@ qxl_pre_init(ScrnInfoPtr pScrn, int flags)
     /* VGA hardware initialisation */
     if (!vgaHWGetHWRec(pScrn))
         return FALSE;
+    vgaHWSetStdFuncs(VGAHWPTR(pScrn));
 #endif
 
     /* hate */
@@ -1489,11 +1587,11 @@ enum qxl_class
 static const struct pci_id_match qxl_device_match[] = {
     {
 	PCI_VENDOR_RED_HAT, PCI_CHIP_QXL_0100, PCI_MATCH_ANY, PCI_MATCH_ANY,
-	0x00030000, 0x00ffffff, CHIP_QXL_1
+	0x00000000, 0x00000000, CHIP_QXL_1
     },
     {
 	PCI_VENDOR_RED_HAT, PCI_CHIP_QXL_01FF, PCI_MATCH_ANY, PCI_MATCH_ANY,
-	0x00030000, 0x00ffffff, CHIP_QXL_1
+	0x00000000, 0x00000000, CHIP_QXL_1
     },
 
     { 0 },
@@ -1642,7 +1740,7 @@ static DriverRec qxl_driver = {
     QXL_DRIVER_NAME,
     qxl_identify,
     qxl_probe,
-    NULL,
+    qxl_available_options,
     NULL,
     0,
 #ifdef XSPICE

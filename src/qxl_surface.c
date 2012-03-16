@@ -192,21 +192,6 @@ qxl_surface_cache_sanity_check (surface_cache_t *qxl)
 #endif
 }
 
-#if 0
-void
-qxl_surface_free_all (qxl_screen_t *qxl)
-{
-    for (i = 0; i < qxl->rom->n_surfaces; ++i)
-    {
-	qxl_surface_t *surface = &(all_surfaces[i]);
-	if (surface->in_use)
-	{
-	    
-	}
-    }
-}
-#endif
-
 static void
 print_cache_info (surface_cache_t *cache)
 {
@@ -264,11 +249,6 @@ surface_get_from_cache (surface_cache_t *cache, int width, int height, int bpp)
 {
     int i;
 
-#if 0
-    ErrorF ("Before getting from cache\n");
-    print_cache_info (cache);
-#endif
-
     for (i = 0; i < N_CACHED_SURFACES; ++i)
     {
 	qxl_surface_t *s = cache->cached_surfaces[i];
@@ -282,32 +262,11 @@ surface_get_from_cache (surface_cache_t *cache, int width, int height, int bpp)
 	    {
 		cache->cached_surfaces[i] = NULL;
 
-#if 0
-		ErrorF ("Got %d from cache\n", s->id);
-		print_cache_info (cache);
-#endif
 		return s;
 	    }
 	}
-#if 0
-	else
-	{
-	    if (s)
-		ErrorF ("!%d (%d %d %d, %d); ", s->id,
-			pixman_image_get_width (s->host_image),
-			pixman_image_get_height (s->host_image),
-			bpp,
-			s->bpp);
-	    else
-		ErrorF ("[null]; ");
-	}
-#endif
     }
 
-#if 0
-    ErrorF ("Nothing in cache for %d %d %d\n", width, height, bpp);
-#endif
-    
     return NULL;
 }
 
@@ -318,25 +277,9 @@ qxl_surface_recycle (surface_cache_t *cache, uint32_t id)
 {
     qxl_surface_t *surface = cache->all_surfaces + id;
 
-#if 0
-    ErrorF ("recycle %d\n", id);
-#endif
-
-#if 0
-    ErrorF ("freeing %p\n", surface->address);
-#endif
-
     n_live--;
     qxl_free (cache->qxl->surf_mem, surface->address);
 
-#if 0
-    ErrorF ("%d live\n", n_live);
-#endif
-    
-#if 0
-    ErrorF ("  Adding %d to free list\n", surface->id);
-#endif
-    
     surface->next = cache->free_surfaces;
     cache->free_surfaces = surface;
 }
@@ -378,7 +321,7 @@ qxl_surface_cache_create_primary (surface_cache_t	*cache,
     create->type = QXL_SURF_TYPE_PRIMARY;
     create->mem = physical_address (cache->qxl, cache->qxl->ram, cache->qxl->main_mem_slot);
 
-    ioport_write(qxl, QXL_IO_CREATE_PRIMARY, 0);
+    qxl_create_primary(qxl);
 
     dev_addr = (uint8_t *)qxl->ram + mode->stride * (mode->y_res - 1);
 
@@ -397,10 +340,6 @@ qxl_surface_cache_create_primary (surface_cache_t	*cache,
     surface->bpp = mode->bits;
     surface->next = NULL;
     surface->prev = NULL;
-
-#if 0
-    ErrorF ("primary %p\n", surface->address);
-#endif
     
     REGION_INIT (NULL, &(surface->access_region), (BoxPtr)NULL, 0);
     surface->access_type = UXA_ACCESS_RO;
@@ -569,9 +508,6 @@ surface_get_from_free_list (surface_cache_t *cache)
 static int
 align (int x)
 {
-#if 0
-    return (x + 255) & ~255;
-#endif
     return x;
 }
 
@@ -589,28 +525,10 @@ surface_send_create (surface_cache_t *cache,
     int n_attempts = 0;
     qxl_screen_t *qxl = cache->qxl;
     qxl_surface_t *surface;
+    void *address;
 
     get_formats (bpp, &format, &pformat);
     
-retry:
-    surface = surface_get_from_free_list (cache);
-    if (!surface)
-    {
-	if (!qxl_handle_oom (cache->qxl))
-	{
-	    ErrorF ("  Out of surfaces\n");
-	    return NULL;
-	}
-	else
-	    goto retry;
-    }
-    
-    if (width == 0 || height == 0)
-    {
-	ErrorF ("   Zero width or height\n");
-	return NULL;
-    }
-
     width = align (width);
     height = align (height);
     
@@ -622,9 +540,9 @@ retry:
      */
     qxl_garbage_collect (cache->qxl);
 retry2:
-    surface->address = qxl_alloc (qxl->surf_mem, stride * height + stride);
+    address = qxl_alloc (qxl->surf_mem, stride * height + stride);
 
-    if (!surface->address)
+    if (!address)
     {
 	ErrorF ("- %dth attempt\n", n_attempts++);
 
@@ -647,7 +565,22 @@ retry2:
 	return NULL;
     }
 
-    surface->end = (char *)surface->address + stride * height;
+retry:
+    surface = surface_get_from_free_list (cache);
+    if (!surface)
+    {
+	if (!qxl_handle_oom (cache->qxl))
+	{
+	    ErrorF ("  Out of surfaces\n");
+	    qxl_free (qxl->surf_mem, address);
+	    return NULL;
+	}
+	else
+	    goto retry;
+    }
+
+    surface->address = address;    
+    surface->end = (char *)address + stride * height;
     
     cmd = make_surface_cmd (cache, surface->id, QXL_SURFACE_CMD_CREATE);
 
@@ -660,10 +593,6 @@ retry2:
       physical_address (qxl, surface->address, qxl->vram_mem_slot);
 
     push_surface_cmd (cache, cmd);
-    
-#if 0
-    ErrorF ("Allocated %d (%d %d %d)\n", surface->id, width, height, surface->bpp);
-#endif
 
     dev_addr = (uint32_t *)((uint8_t *)surface->address + stride * (height - 1));
 
@@ -688,6 +617,9 @@ qxl_surface_create (surface_cache_t *    cache,
 {
     qxl_surface_t *surface;
 
+    if (!cache->qxl->enable_surfaces)
+	return NULL;
+    
     if ((bpp & 3) != 0)
     {
 	ErrorF ("   Bad bpp: %d (%d)\n", bpp, bpp & 7);
@@ -712,6 +644,12 @@ qxl_surface_create (surface_cache_t *    cache,
 	return NULL;
     }
 
+    if (width == 0 || height == 0)
+    {
+	ErrorF ("   Zero width or height\n");
+	return NULL;
+    }
+
     if (!(surface = surface_get_from_cache (cache, width, height, bpp)))
 	if (!(surface = surface_send_create (cache, width, height, bpp)))
 	    return NULL;
@@ -731,10 +669,6 @@ qxl_surface_set_pixmap (qxl_surface_t *surface, PixmapPtr pixmap)
     surface->pixmap = pixmap;
 
     assert (get_surface (pixmap) == surface);
-
-#if 0
-    ErrorF ("setting pixmap %p on surface %p\n", pixmap, surface);
-#endif
 }
 
 static void
@@ -838,10 +772,6 @@ surface_add_to_cache (qxl_surface_t *surface)
      */
     if (destroy_surface)
 	qxl_surface_unref (destroy_surface->cache, destroy_surface->id);
-    
-#if 0
-    ErrorF ("Done\n");
-#endif
 }
 
 void
@@ -852,12 +782,7 @@ qxl_surface_unref (surface_cache_t *cache, uint32_t id)
 	qxl_surface_t *surface = cache->all_surfaces + id;
 
 	if (--surface->ref_count == 0)
-	{
-#if 0
-	    ErrorF ("destroying %d\n", id);
-#endif
 	    send_destroy (surface);
-	}
     }
 }
 
@@ -866,34 +791,14 @@ qxl_surface_kill (qxl_surface_t *surface)
 {
     unlink_surface (surface);
 
-#if 0
-    ErrorF ("killed %d (%d %d %d)\n", surface->id,
-	    pixman_image_get_width (surface->host_image),
-	    pixman_image_get_height (surface->host_image),
-	    surface->bpp);
-#endif
-    
     if (surface->id != 0					&&
 	pixman_image_get_width (surface->host_image) >= 128	&&
 	pixman_image_get_height (surface->host_image) >= 128)
     {
-#if 0
-	ErrorF ("Adding %d to cache\n", surface->id);
-#endif
 	surface_add_to_cache (surface);
     }
     
-#if 0
-    ErrorF ("After adding %d to cache\n", surface->id);
-    print_cache_info (surface->cache);
-#endif
-    
     qxl_surface_unref (surface->cache, surface->id);
-
-#if 0
-    ErrorF ("After unreffing %d\n", surface->id);
-    print_cache_info (surface->cache);
-#endif
 }
 
 /* send anything pending to the other side */
@@ -916,11 +821,7 @@ download_box (qxl_surface_t *surface, int x1, int y1, int x2, int y2)
     
     ram_header->update_surface = surface->id;
 
-#if 0
-    ErrorF ("Issuing update command for %d\n", surface->id);
-#endif
-
-    ioport_write(surface->cache->qxl, QXL_IO_UPDATE_AREA, 0);
+    qxl_update_area(surface->cache->qxl);
 
     pixman_image_composite (PIXMAN_OP_SRC,
      			    surface->dev_image,
@@ -956,18 +857,8 @@ qxl_surface_prepare_access (qxl_surface_t  *surface,
     n_boxes = REGION_NUM_RECTS (region);
     boxes = REGION_RECTS (region);
 
-#if 0
-    ErrorF ("Preparing access to %d boxes\n", n_boxes);
-#endif
-
     stride = pixman_image_get_stride (surface->dev_image);
     height = pixman_image_get_height (surface->dev_image);
-
-#if 0
-    ErrorF ("Flattening %p -> %p  (allocated end %p)\n", 
-	    surface->address, 
-	    surface->address + stride * height, surface->end);
-#endif
 
     if (n_boxes < 25)
     {
@@ -980,11 +871,9 @@ qxl_surface_prepare_access (qxl_surface_t  *surface,
     }
     else
     {
-#if 0
-	ErrorF ("Downloading extents (%d > %d)\n", n_boxes, 25);
-#endif
-	
-	download_box (surface, new.extents.x1, new.extents.y1, new.extents.x2, new.extents.y2);
+	download_box (
+	    surface,
+	    new.extents.x1, new.extents.y1, new.extents.x2, new.extents.y2);
     }
     
     REGION_UNION (pScreen,
@@ -996,21 +885,12 @@ qxl_surface_prepare_access (qxl_surface_t  *surface,
     
     pScreen->ModifyPixmapHeader(
 	pixmap,
-#if 0
 	pixmap->drawable.width,
 	pixmap->drawable.height,
-#endif
-	pixman_image_get_width (surface->host_image),
-	pixman_image_get_height (surface->host_image),
 	-1, -1, -1,
 	pixman_image_get_data (surface->host_image));
 
     pixmap->devKind = pixman_image_get_stride (surface->host_image);
-
-#if 0
-    ErrorF ("stride %d\n", pixmap->devKind);
-    ErrorF ("height %d\n", pixmap->drawable.height);
-#endif
     
     return TRUE;
 }
@@ -1053,7 +933,7 @@ real_upload_box (qxl_surface_t *surface, int x1, int y1, int x2, int y2)
     
     image = qxl_image_create (
 	qxl, (const uint8_t *)data, x1, y1, x2 - x1, y2 - y1, stride, 
-	surface->bpp == 24 ? 4 : surface->bpp / 8);
+	surface->bpp == 24 ? 4 : surface->bpp / 8, TRUE);
     drawable->u.copy.src_bitmap =
 	physical_address (qxl, image, qxl->main_mem_slot);
     
@@ -1131,9 +1011,6 @@ qxl_surface_cache_evacuate_all (surface_cache_t *cache)
     qxl_surface_t *s;
     int i;
 
-#if 0
-    ErrorF ("Before evacucate\n");
-#endif
     for (i = 0; i < N_CACHED_SURFACES; ++i)
     {
 	if (cache->cached_surfaces[i])
@@ -1142,10 +1019,6 @@ qxl_surface_cache_evacuate_all (surface_cache_t *cache)
 	    cache->cached_surfaces[i] = NULL;
 	}
     }
-
-#if 0
-    ErrorF ("Evacuating all\n");
-#endif
 
     s = cache->live_surfaces;
     while (s != NULL)
@@ -1164,10 +1037,6 @@ qxl_surface_cache_evacuate_all (surface_cache_t *cache)
 
 	assert (get_surface (evacuated->pixmap) == s);
 	
-#if 0
-	ErrorF ("Evacuated %d => %p\n", s->id, evacuated->pixmap);
-#endif
-
 	evacuated->bpp = s->bpp;
 	
 	s->host_image = NULL;
@@ -1193,12 +1062,6 @@ qxl_surface_cache_replace_all (surface_cache_t *cache, void *data)
 {
     evacuated_surface_t *ev;
 
-#if 0
-    ErrorF ("Before replace\n");
-#endif
-#if 0
-    ErrorF ("Replacing all\n");
-#endif
     if (!surface_cache_init (cache, cache->qxl))
     {
 	/* FIXME: report the error */
@@ -1214,10 +1077,6 @@ qxl_surface_cache_replace_all (surface_cache_t *cache, void *data)
 	qxl_surface_t *surface;
 
 	surface = qxl_surface_create (cache, width, height, ev->bpp);
-#if 0
-	ErrorF ("recreated %d\n", surface->id);
-	ErrorF ("%d => %p\n", surface->id, ev->pixmap);
-#endif
 
 	assert (surface->host_image);
 	assert (surface->dev_image);
@@ -1300,12 +1159,7 @@ qxl_surface_solid (qxl_surface_t *destination,
     qrect.left = x1;
     qrect.right = x2;
 
-#if 0
-    if (destination->u.solid_pixel == 0x0000)
-	p = 0xffccffcc;
-    else
-#endif
-	p = destination->u.solid_pixel;
+    p = destination->u.solid_pixel;
     
     submit_fill (qxl, destination->id, &qrect, p);
 }
@@ -1318,23 +1172,9 @@ qxl_surface_prepare_copy (qxl_surface_t *dest,
     if (!REGION_NIL (&(dest->access_region))	||
 	!REGION_NIL (&(source->access_region)))
     {
-#if 0
-	ErrorF (" copy not in vmvm\n");
-#endif
-	
 	return FALSE;
     }
 
-#if 0
-    if (dest->id != source->id)
-	return FALSE;
-#endif
-
-#ifdef DEBUG_REGIONS
-    print_region ("prepare copy src", &(source->access_region));
-    print_region ("prepare copy dest", &(dest->access_region));
-#endif
-    
     dest->u.copy_src = source;
 
     return TRUE;
@@ -1355,10 +1195,6 @@ qxl_surface_copy (qxl_surface_t *dest,
     print_region (" copy dest", &(dest->access_region));
 #endif
 
-#if 0
-    ErrorF ("copy from %d to %d\n", dest->u.copy_src->id, dest->id);
-#endif
-    
     qrect.top = dest_y1;
     qrect.bottom = dest_y1 + height;
     qrect.left = dest_x1;
@@ -1385,13 +1221,6 @@ qxl_surface_copy (qxl_surface_t *dest,
 
 	drawable = make_drawable (qxl, dest->id, QXL_DRAW_COPY, &qrect);
 
-#if 0
-	ErrorF ("Drawing %d to %d [area %d %d %d %d] (command is %p)\n",
-		dest->u.copy_src->id, dest->id,
-		qrect.left, qrect.top, qrect.right, qrect.bottom,
-		drawable);
-#endif
-	
 	drawable->u.copy.src_bitmap = physical_address (qxl, image, qxl->main_mem_slot);
 	drawable->u.copy.src_area.left = src_x1;
 	drawable->u.copy.src_area.top = src_y1;
@@ -1407,12 +1236,6 @@ qxl_surface_copy (qxl_surface_t *dest,
 	drawable->surfaces_dest[0] = dest->u.copy_src->id;
 	drawable->surfaces_rects[0] = drawable->u.copy.src_area;
  	
-#if 0
-	submit_fill (qxl, dest->id, &qrect, 0xffff00ff);
-
-	usleep (70000);
-#endif
-	
 	assert (src_x1 >= 0);
 	assert (src_y1 >= 0);
 
@@ -1460,7 +1283,7 @@ qxl_surface_put_image (qxl_surface_t *dest,
 
     image = qxl_image_create (
 	qxl, (const uint8_t *)src, 0, 0, width, height, src_pitch,
-	dest->bpp == 24 ? 4 : dest->bpp / 8);
+	dest->bpp == 24 ? 4 : dest->bpp / 8, FALSE);
     drawable->u.copy.src_bitmap =
 	physical_address (qxl, image, qxl->main_mem_slot);
     

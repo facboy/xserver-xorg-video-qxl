@@ -37,7 +37,6 @@
 #if GET_ABI_MAJOR(ABI_VIDEODRV_VERSION) < 6
 #include "xf86Resources.h"
 #endif
-#include "xf86PciInfo.h"
 #include "xf86Cursor.h"
 #include "xf86_OSproc.h"
 #include "xf86xv.h"
@@ -99,8 +98,11 @@ typedef struct qxl_surface_t qxl_surface_t;
  */
 
 enum {
+    OPTION_ENABLE_IMAGE_CACHE = 0,
+    OPTION_ENABLE_FALLBACK_CACHE,
+    OPTION_ENABLE_SURFACES,
 #ifdef XSPICE
-    OPTION_SPICE_PORT = 0,
+    OPTION_SPICE_PORT,
     OPTION_SPICE_TLS_PORT,
     OPTION_SPICE_ADDR,
     OPTION_SPICE_X509_DIR,
@@ -207,6 +209,10 @@ struct _qxl_screen_t
 
     OptionInfoRec	options[OPTION_COUNT + 1];
 
+    int				enable_image_cache;
+    int				enable_fallback_cache;
+    int				enable_surfaces;
+    
 #ifdef XSPICE
     /* XSpice specific */
     struct QXLRom		shadow_rom;    /* Parameter RAM */
@@ -381,13 +387,14 @@ get_ram_header (qxl_screen_t *qxl)
  * Images
  */
 struct QXLImage *qxl_image_create     (qxl_screen_t           *qxl,
-					const uint8_t          *data,
-					int                     x,
-					int                     y,
-					int                     width,
-					int                     height,
-					int                     stride,
-					int                     Bpp);
+				       const uint8_t          *data,
+				       int                     x,
+				       int                     y,
+				       int                     width,
+				       int                     height,
+				       int                     stride,
+				       int                     Bpp,
+				       Bool		       fallback);
 void              qxl_image_destroy    (qxl_screen_t           *qxl,
 					struct QXLImage       *image);
 void		  qxl_drop_image_cache (qxl_screen_t	       *qxl);
@@ -409,6 +416,14 @@ void              qxl_mem_free_all     (struct qxl_mem         *mem);
 void *            qxl_allocnf          (qxl_screen_t           *qxl,
 					unsigned long           size);
 int		   qxl_garbage_collect (qxl_screen_t *qxl);
+
+/*
+ * I/O port commands
+ */
+void qxl_update_area(qxl_screen_t *qxl);
+void qxl_memslot_add(qxl_screen_t *qxl, uint8_t id);
+void qxl_create_primary(qxl_screen_t *qxl);
+void qxl_notify_oom(qxl_screen_t *qxl);
 
 #ifdef XSPICE
 /* device to spice-server, now xspice to spice-server */
