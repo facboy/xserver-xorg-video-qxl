@@ -21,4 +21,5 @@ THE AUTHORS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER
 IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN
 CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 
-src/lookup3.c is public domain software by Bob Jenkins, May 2006.
+src/murmurhash3.c, src/murmurhash3.h is public domain software, and 
+written by Austin Appleby.
