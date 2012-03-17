@@ -1,8 +1,18 @@
-xserver-xorg-video-qxl (0.0.16-3) UNRELEASED; urgency=low
+xserver-xorg-video-qxl (0.0.17-1) unstable; urgency=low
 
+  [ Liang Guo ]
+  * New upstream release.
+  * debian/copyright:
+    - Remove src/lookup3.c, removed upstream.
+    - Add src/murmurhash3.{c,h}, new file. 
+  * debian/source/options:
+    - Ignore ChangeLog, included in upstream tarbar, but not in git.
+  * Remove translate-the-access-region.patch, applied upstream.
+  * Bump Standards-Version to 3.9.3, no changes needed.
+  [ Cyril Brulebois ]
   * Fix typo in the debug package's description.
 
- -- Cyril Brulebois <kibi@debian.org>  Thu, 02 Feb 2012 17:49:19 +0100
+ -- Liang Guo <bluestonechina@gmail.com>  Fri, 16 Mar 2012 16:13:52 +0800
 
 xserver-xorg-video-qxl (0.0.16-2) unstable; urgency=low
 
