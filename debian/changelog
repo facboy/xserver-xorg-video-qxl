@@ -1,8 +1,9 @@
 xserver-xorg-video-qxl (0.0.17-2) unstable; urgency=low
 
   * Enable Xspice (Closes: 668537)
+  * Add debian/xserver-xorg-video-qxl.docs.
 
- -- Liang Guo <bluestonechina@gmail.com>  Sun, 15 Apr 2012 15:10:01 +0800
+ -- Liang Guo <bluestonechina@gmail.com>  Mon, 16 Apr 2012 22:04:27 +0800
 
 xserver-xorg-video-qxl (0.0.17-1) unstable; urgency=low
 
