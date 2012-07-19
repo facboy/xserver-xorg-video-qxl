@@ -19,6 +19,9 @@
  * IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN
  * CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
  */
+#ifdef HAVE_CONFIG_H
+#include "config.h"
+#endif
 
 #include <sys/time.h>
 
@@ -312,9 +315,24 @@ static void select_and_check_watches(void)
     }
 }
 
+static int no_write_watches(Ring *w)
+{
+    SpiceWatch *watch;
+    RingItem *link;
+    RingItem *next;
+
+    RING_FOREACH_SAFE(link, next, w) {
+        watch = (SpiceWatch*)link;
+        if (!watch->remove && (watch->event_mask & SPICE_WATCH_EVENT_WRITE))
+            return 0;
+    }
+
+    return 1;
+}
+
 static void xspice_wakeup_handler(pointer data, int nfds, pointer readmask)
 {
-    if (!nfds) {
+    if (!nfds && no_write_watches(&watches)) {
         return;
     }
     select_and_check_watches();

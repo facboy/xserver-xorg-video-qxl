@@ -19,6 +19,9 @@
  * IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN
  * CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
  */
+#ifdef HAVE_CONFIG_H
+#include "config.h"
+#endif
 
 #include <pthread.h>
 #include <sched.h>
@@ -55,7 +58,7 @@
 
 static int spiceqxl_io_port_debug_level = -1;
 
-static void dprint(int _level, const char *_fmt, ...)
+static void __attribute__ ((format (printf, 2, 3))) dprint(int _level, const char *_fmt, ...)
 {
     if (spiceqxl_io_port_debug_level == -1) {
         if (getenv("XSPICE_IO_PORT_DEBUG_LEVEL")) {
@@ -172,7 +175,7 @@ static void qxl_destroy_primary(qxl_screen_t *qxl)
 static void qxl_set_mode(qxl_screen_t *qxl, int modenr)
 {
     struct QXLMode *mode = qxl->modes + modenr;
-    uint64_t devmem = (uint64_t)qxl->ram;
+    uint64_t devmem = pointer_to_u64(qxl->ram);
     QXLSurfaceCreate surface = {
         .width      = mode->x_res,
         .height     = mode->y_res,
@@ -249,10 +252,10 @@ void ioport_write(qxl_screen_t *qxl, uint32_t io_port, uint32_t val)
         qxl_hard_reset(qxl);
         break;
     case QXL_IO_MEMSLOT_ADD:
-        dprint(1, "QXL_IO_MEMSLOT_ADD - should not be called (this is XSpice)\n");
+        dprint(1, "QXL_IO_MEMSLOT_ADD - should not be called (this is Xspice)\n");
         break;
     case QXL_IO_MEMSLOT_DEL:
-        dprint(1, "QXL_IO_MEMSLOT_DEL - should not be called (this is XSpice)\n");
+        dprint(1, "QXL_IO_MEMSLOT_DEL - should not be called (this is Xspice)\n");
         break;
     case QXL_IO_CREATE_PRIMARY:
         assert(val == 0);

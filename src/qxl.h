@@ -23,8 +23,6 @@
 #ifndef QXL_H
 #define QXL_H
 
-#include "config.h"
-
 #include <stdint.h>
 
 #include <spice/qxl_dev.h>
@@ -52,6 +50,7 @@
 #include "vgaHW.h"
 #endif /* XSPICE */
 
+#include "compat-api.h"
 #define hidden _X_HIDDEN
 
 #ifdef XSPICE
@@ -128,6 +127,12 @@ enum {
     OPTION_COUNT,
 };
 
+enum {
+    QXL_DEVICE_PRIMARY_UNDEFINED,
+    QXL_DEVICE_PRIMARY_NONE,
+    QXL_DEVICE_PRIMARY_CREATED,
+};
+
 struct _qxl_screen_t
 {
     /* These are the names QXL uses */
@@ -140,6 +145,8 @@ struct _qxl_screen_t
     struct qxl_ring *		command_ring;
     struct qxl_ring *		cursor_ring;
     struct qxl_ring *		release_ring;
+
+    int                         device_primary;
     
     int				num_modes;
     struct QXLMode *		modes;
@@ -417,13 +424,22 @@ void *            qxl_allocnf          (qxl_screen_t           *qxl,
 					unsigned long           size);
 int		   qxl_garbage_collect (qxl_screen_t *qxl);
 
+#ifdef DEBUG_QXL_MEM
+void qxl_mem_unverifiable(struct qxl_mem *mem);
+#else
+static inline void qxl_mem_unverifiable(struct qxl_mem *mem) {}
+#endif
+
 /*
  * I/O port commands
  */
 void qxl_update_area(qxl_screen_t *qxl);
-void qxl_memslot_add(qxl_screen_t *qxl, uint8_t id);
-void qxl_create_primary(qxl_screen_t *qxl);
-void qxl_notify_oom(qxl_screen_t *qxl);
+void qxl_io_memslot_add(qxl_screen_t *qxl, uint8_t id);
+void qxl_io_create_primary(qxl_screen_t *qxl);
+void qxl_io_destroy_primary(qxl_screen_t *qxl);
+void qxl_io_notify_oom(qxl_screen_t *qxl);
+void qxl_io_flush_surfaces(qxl_screen_t *qxl);
+void qxl_io_destroy_all_surfaces (qxl_screen_t *qxl);
 
 #ifdef XSPICE
 /* device to spice-server, now xspice to spice-server */

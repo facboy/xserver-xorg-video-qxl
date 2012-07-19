@@ -43,7 +43,17 @@
  * which puts the surface into the 'free' state.
  *
  */
+#ifdef HAVE_CONFIG_H
+#include "config.h"
+#endif
+
 #include "qxl.h"
+
+#ifdef DEBUG_SURFACE_LIFECYCLE
+#include <stdio.h>
+
+static FILE* surface_log;
+#endif
 
 typedef struct evacuated_surface_t evacuated_surface_t;
 
@@ -72,7 +82,9 @@ struct qxl_surface_t
     int			ref_count;
 
     PixmapPtr		pixmap;
-    
+
+    struct evacuated_surface_t *evacuated;
+
     union
     {
 	qxl_surface_t *copy_src;
@@ -86,6 +98,7 @@ struct evacuated_surface_t
     PixmapPtr		 pixmap;
     int			 bpp;
 
+    evacuated_surface_t *prev;
     evacuated_surface_t *next;
 };
 
@@ -115,15 +128,59 @@ struct surface_cache_t
     qxl_surface_t *cached_surfaces[N_CACHED_SURFACES];
 };
 
+#ifdef DEBUG_SURFACE_LIFECYCLE
+static void debug_surface_open(void)
+{
+    if (surface_log)
+        return;
+    surface_log = fopen("/tmp/xf86-video-qxl.surface.log", "w+");
+    if (!surface_log)
+    {
+        fprintf(stderr, "error creating surface log file (DEBUG_SURFACE_LIFECYCLE)\n");
+        exit(-1);
+    }
+}
+
+static int surface_count(qxl_surface_t *surface)
+{
+    int i;
+
+    for (i = 0; surface ;++i, surface = surface->next);
+    return i;
+}
+
+static void debug_surface_log(surface_cache_t *cache)
+{
+    int  live_n, free_n;
+
+    debug_surface_open();
+    live_n = surface_count(cache->live_surfaces);
+    free_n = surface_count(cache->free_surfaces);
+    fprintf(surface_log, "live,free,sum = %d, %d, %d\n", live_n, free_n,
+            live_n + free_n);
+    fflush(surface_log);
+}
+
+#else
+#define debug_surface_log(cache)
+#endif
+
+
 static Bool
 surface_cache_init (surface_cache_t *cache, qxl_screen_t *qxl)
 {
     int n_surfaces = qxl->rom->n_surfaces;
     int i;
 
-    cache->all_surfaces = calloc (n_surfaces, sizeof (qxl_surface_t));
     if (!cache->all_surfaces)
-	return FALSE;
+    {
+        /* all_surfaces is not freed when evacuating, since surfaces are still
+         * tied to pixmaps that may be destroyed after evacuation before
+         * recreation */
+        cache->all_surfaces = calloc (n_surfaces, sizeof (qxl_surface_t));
+        if (!cache->all_surfaces)
+            return FALSE;
+    }
 
     memset (cache->all_surfaces, 0, n_surfaces * sizeof (qxl_surface_t));
     memset (cache->cached_surfaces, 0, N_CACHED_SURFACES * sizeof (qxl_surface_t *));
@@ -137,6 +194,7 @@ surface_cache_init (surface_cache_t *cache, qxl_screen_t *qxl)
 	cache->all_surfaces[i].cache = cache;
 	cache->all_surfaces[i].dev_image = NULL;
 	cache->all_surfaces[i].host_image = NULL;
+	cache->all_surfaces[i].evacuated = NULL;
 	
 	REGION_INIT (
 	    NULL, &(cache->all_surfaces[i].access_region), (BoxPtr)NULL, 0);
@@ -161,6 +219,7 @@ qxl_surface_cache_create (qxl_screen_t *qxl)
     if (!cache)
 	return NULL;
 
+    memset(cache, 0, sizeof(*cache));
     cache->qxl = qxl;
     if (!surface_cache_init (cache, qxl))
     {
@@ -321,7 +380,7 @@ qxl_surface_cache_create_primary (surface_cache_t	*cache,
     create->type = QXL_SURF_TYPE_PRIMARY;
     create->mem = physical_address (cache->qxl, cache->qxl->ram, cache->qxl->main_mem_slot);
 
-    qxl_create_primary(qxl);
+    qxl_io_create_primary(qxl);
 
     dev_addr = (uint8_t *)qxl->ram + mode->stride * (mode->y_res - 1);
 
@@ -340,6 +399,7 @@ qxl_surface_cache_create_primary (surface_cache_t	*cache,
     surface->bpp = mode->bits;
     surface->next = NULL;
     surface->prev = NULL;
+    surface->evacuated = NULL;
     
     REGION_INIT (NULL, &(surface->access_region), (BoxPtr)NULL, 0);
     surface->access_type = UXA_ACCESS_RO;
@@ -353,8 +413,6 @@ make_surface_cmd (surface_cache_t *cache, uint32_t id, QXLSurfaceCmdType type)
     struct QXLSurfaceCmd *cmd;
     qxl_screen_t *qxl = cache->qxl;
 
-    qxl_garbage_collect (qxl);
-    
     cmd = qxl_allocnf (qxl, sizeof *cmd);
 
     cmd->release_info.id = pointer_to_u64 (cmd) | 2;
@@ -538,7 +596,7 @@ surface_send_create (surface_cache_t *cache,
     /* the final + stride is to work around a bug where the device apparently 
      * scribbles after the end of the image
      */
-    qxl_garbage_collect (cache->qxl);
+    qxl_garbage_collect (qxl);
 retry2:
     address = qxl_alloc (qxl->surf_mem, stride * height + stride);
 
@@ -622,7 +680,7 @@ qxl_surface_create (surface_cache_t *    cache,
     
     if ((bpp & 3) != 0)
     {
-	ErrorF ("   Bad bpp: %d (%d)\n", bpp, bpp & 7);
+	ErrorF ("%s: Bad bpp: %d (%d)\n", __FUNCTION__, bpp, bpp & 7);
 	return NULL;
     }
 
@@ -640,13 +698,13 @@ qxl_surface_create (surface_cache_t *    cache,
     
     if (bpp != 8 && bpp != 16 && bpp != 32 && bpp != 24)
     {
-	ErrorF ("   Unknown bpp\n");
+	ErrorF ("%s: Unknown bpp\n", __FUNCTION__);
 	return NULL;
     }
 
     if (width == 0 || height == 0)
     {
-	ErrorF ("   Zero width or height\n");
+	ErrorF ("%s: Zero width or height\n", __FUNCTION__);
 	return NULL;
     }
 
@@ -674,10 +732,15 @@ qxl_surface_set_pixmap (qxl_surface_t *surface, PixmapPtr pixmap)
 static void
 unlink_surface (qxl_surface_t *surface)
 {
-    if (surface->prev)
-	surface->prev->next = surface->next;
-    else
-	surface->cache->live_surfaces = surface->next;
+    if (surface->id != 0)
+    {
+        if (surface->prev)
+            surface->prev->next = surface->next;
+        else
+            surface->cache->live_surfaces = surface->next;
+    }
+
+    debug_surface_log(surface->cache);
     
     if (surface->next)
 	surface->next->prev = surface->prev;
@@ -726,7 +789,6 @@ surface_add_to_cache (qxl_surface_t *surface)
     
     if (n_surfaces == N_CACHED_SURFACES)
     {
-	int i;
 	destroy_id = cache->cached_surfaces[oldest]->id;
 	
 	destroy_surface = cache->cached_surfaces[oldest];
@@ -789,6 +851,24 @@ qxl_surface_unref (surface_cache_t *cache, uint32_t id)
 void
 qxl_surface_kill (qxl_surface_t *surface)
 {
+    struct evacuated_surface_t *ev = surface->evacuated;
+
+    if (ev)
+    {
+        /* server side surface is already destroyed (via reset), don't
+         * resend a destroy. Just mark surface as not to be recreated */
+        ev->pixmap = NULL;
+        if (ev->image)
+            pixman_image_unref (ev->image);
+        if (ev->next)
+            ev->next->prev = ev->prev;
+        if (ev->prev)
+            ev->prev->next = ev->next;
+        free(ev);
+        surface->evacuated = NULL;
+        return;
+    }
+
     unlink_surface (surface);
 
     if (surface->id != 0					&&
@@ -839,9 +919,8 @@ qxl_surface_prepare_access (qxl_surface_t  *surface,
     int n_boxes;
     BoxPtr boxes;
     ScreenPtr pScreen = pixmap->drawable.pScreen;
-    ScrnInfoPtr pScrn = xf86Screens[pScreen->myNum];
+    ScrnInfoPtr pScrn = xf86ScreenToScrn(pScreen);
     RegionRec new;
-    int stride, height;
 
     if (!pScrn->vtSema)
         return FALSE;
@@ -856,9 +935,6 @@ qxl_surface_prepare_access (qxl_surface_t  *surface,
     
     n_boxes = REGION_NUM_RECTS (region);
     boxes = REGION_RECTS (region);
-
-    stride = pixman_image_get_stride (surface->dev_image);
-    height = pixman_image_get_height (surface->dev_image);
 
     if (n_boxes < 25)
     {
@@ -1044,16 +1120,17 @@ qxl_surface_cache_evacuate_all (surface_cache_t *cache)
 	unlink_surface (s);
 	
 	evacuated->next = evacuated_surfaces;
+        if (evacuated_surfaces)
+            evacuated_surfaces->prev = evacuated;
 	evacuated_surfaces = evacuated;
+        s->evacuated = evacuated;
 
 	s = next;
     }
 
-    free (cache->all_surfaces);
-    cache->all_surfaces = NULL;
     cache->live_surfaces = NULL;
     cache->free_surfaces = NULL;
-    
+
     return evacuated_surfaces;
 }
 
