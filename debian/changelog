@@ -1,4 +1,4 @@
-xserver-xorg-video-qxl (0.0.18~gitde66207-1) UNRELEASED; urgency=low
+xserver-xorg-video-qxl (0.1.0-1) UNRELEASED; urgency=low
 
   * New upstream release.
 
