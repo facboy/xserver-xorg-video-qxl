@@ -138,7 +138,7 @@ qxl_image_create (qxl_screen_t *qxl, const uint8_t *data,
 	struct QXLImage *image;
 	struct QXLDataChunk *head;
 	struct QXLDataChunk *tail;
-	int dest_stride = width * Bpp;
+	int dest_stride = (width * Bpp + 3) & (~3);
 	int h;
 
 	data += y * stride + x * Bpp;
@@ -160,7 +160,7 @@ qxl_image_create (qxl_screen_t *qxl, const uint8_t *data,
 	    int chunk_size = MAX (512 * 512, dest_stride);
 	    int n_lines = MIN ((chunk_size / dest_stride), h);
 	    QXLDataChunk *chunk =
-		qxl_allocnf (qxl, sizeof *chunk + n_lines * dest_stride);
+		qxl_allocnf (qxl, sizeof *chunk + n_lines * dest_stride, "image data");
 
 	    chunk->data_size = n_lines * dest_stride;
 	    hash = hash_and_copy (data, stride,
@@ -187,7 +187,7 @@ qxl_image_create (qxl_screen_t *qxl, const uint8_t *data,
 	}
 
 	/* Image */
-	image = qxl_allocnf (qxl, sizeof *image);
+	image = qxl_allocnf (qxl, sizeof *image, "image struct");
 
 	image->descriptor.id = 0;
 	image->descriptor.type = SPICE_IMAGE_TYPE_BITMAP;
@@ -202,11 +202,11 @@ qxl_image_create (qxl_screen_t *qxl, const uint8_t *data,
 	}
 	else if (Bpp == 1)
 	{
-	    image->bitmap.format = SPICE_BITMAP_FMT_8BIT;
+	    image->bitmap.format = SPICE_BITMAP_FMT_8BIT_A;
 	}
 	else if (Bpp == 4)
 	{
-	    image->bitmap.format = SPICE_BITMAP_FMT_32BIT;
+	    image->bitmap.format = SPICE_BITMAP_FMT_RGBA;
 	}
 	else
 	{
@@ -216,14 +216,10 @@ qxl_image_create (qxl_screen_t *qxl, const uint8_t *data,
 	image->bitmap.flags = SPICE_BITMAP_FLAGS_TOP_DOWN;
 	image->bitmap.x = width;
 	image->bitmap.y = height;
-	image->bitmap.stride = width * Bpp;
+	image->bitmap.stride = dest_stride;
 	image->bitmap.palette = 0;
 	image->bitmap.data = physical_address (qxl, head, qxl->main_mem_slot);
 
-#if 0
-	ErrorF ("%p has size %d %d\n", image, width, height);
-#endif
-	
 	/* Add to hash table if caching is enabled */
 	if ((fallback && qxl->enable_fallback_cache)	||
 	    (!fallback && qxl->enable_image_cache))
@@ -280,10 +276,10 @@ qxl_image_destroy (qxl_screen_t *qxl,
 
 	chunk = virtual->next_chunk;
 
-	qxl_free (qxl->mem, virtual);
+	qxl_free (qxl->mem, virtual, "image data");
     }
     
-    qxl_free (qxl->mem, image);
+    qxl_free (qxl->mem, image, "image struct");
 }
 
 void

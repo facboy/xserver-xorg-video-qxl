@@ -38,6 +38,7 @@
 #include "xf86Cursor.h"
 #include "xf86_OSproc.h"
 #include "xf86xv.h"
+#include "xf86Crtc.h"
 #include "shadow.h"
 #include "micmap.h"
 #include "uxa/uxa.h"
@@ -100,6 +101,7 @@ enum {
     OPTION_ENABLE_IMAGE_CACHE = 0,
     OPTION_ENABLE_FALLBACK_CACHE,
     OPTION_ENABLE_SURFACES,
+    OPTION_NUM_HEADS,
 #ifdef XSPICE
     OPTION_SPICE_PORT,
     OPTION_SPICE_TLS_PORT,
@@ -154,13 +156,21 @@ struct _qxl_screen_t
     void *			surface0_area;
     long			surface0_size;
     long			vram_size;
+    long			ram_size;
+
+    DisplayModePtr              x_modes;
 
     int				virtual_x;
     int				virtual_y;
     void *			fb;
-    int				stride;
-    struct QXLMode *		current_mode;
+
+    /* not the same as the heads mode for #head > 1 or virtual != head size */
+    struct QXLMode 		primary_mode;
     qxl_surface_t *		primary;
+
+    struct QXLMonitorsConfig   *monitors_config;
+    int                         monitors_config_size;
+    int                         mem_size;
     
     int				bytes_per_pixel;
 
@@ -171,6 +181,10 @@ struct _qxl_screen_t
     struct qxl_mem *		surf_mem;  /* Context for qxl_surf_alloc/free */
     
     EntityInfoPtr		entity;
+
+    int                         num_heads;
+    xf86CrtcPtr *               crtcs;
+    xf86OutputPtr *             outputs;
 
 #ifndef XSPICE
     void *			io_pages;
@@ -248,6 +262,18 @@ struct _qxl_screen_t
 #endif /* XSPICE */
 };
 
+typedef struct qxl_output_private {
+    qxl_screen_t *qxl;
+    int           head;
+    xf86OutputStatus status;
+} qxl_output_private;
+
+typedef struct qxl_crtc_private {
+    qxl_screen_t *qxl;
+    int           head;
+    xf86OutputPtr output;
+} qxl_crtc_private;
+
 static inline uint64_t
 physical_address (qxl_screen_t *qxl, void *virtual, uint8_t slot_id)
 {
@@ -303,6 +329,10 @@ Bool              qxl_ring_pop         (struct qxl_ring        *ring,
 					void                   *element);
 void              qxl_ring_wait_idle   (struct qxl_ring        *ring);
 
+void              qxl_ring_request_notify (struct qxl_ring *ring);
+
+int               qxl_ring_prod        (struct qxl_ring        *ring);
+int               qxl_ring_cons        (struct qxl_ring        *ring);
 
 /*
  * Surface
@@ -362,7 +392,21 @@ Bool		    qxl_surface_put_image    (qxl_surface_t *dest,
 					      const char *src, int src_pitch);
 void		    qxl_surface_unref        (surface_cache_t *cache,
 					      uint32_t surface_id);
-					      
+
+/* composite */
+Bool		    qxl_surface_prepare_composite (int op,
+						   PicturePtr	src_picture,
+						   PicturePtr	mask_picture,
+						   PicturePtr   dst_picture,
+						   qxl_surface_t *src,
+						   qxl_surface_t *mask,
+						   qxl_surface_t *dest);
+void		   qxl_surface_composite (qxl_surface_t *dest,
+					  int src_x, int src_y,
+					  int mask_x, int mask_y,
+					  int dst_x, int dst_y,
+					  int width, int height);
+
 #if HAS_DEVPRIVATEKEYREC
 extern DevPrivateKeyRec uxa_pixmap_index;
 #else
@@ -416,12 +460,15 @@ struct qxl_mem *  qxl_mem_create       (void                   *base,
 void              qxl_mem_dump_stats   (struct qxl_mem         *mem,
 					const char             *header);
 void *            qxl_alloc            (struct qxl_mem         *mem,
-					unsigned long           n_bytes);
+					unsigned long           n_bytes,
+					const char *            name);
 void              qxl_free             (struct qxl_mem         *mem,
-					void                   *d);
+					void                   *d,
+					const char *            name);
 void              qxl_mem_free_all     (struct qxl_mem         *mem);
 void *            qxl_allocnf          (qxl_screen_t           *qxl,
-					unsigned long           size);
+					unsigned long           size,
+					const char *            name);
 int		   qxl_garbage_collect (qxl_screen_t *qxl);
 
 #ifdef DEBUG_QXL_MEM
@@ -440,6 +487,11 @@ void qxl_io_destroy_primary(qxl_screen_t *qxl);
 void qxl_io_notify_oom(qxl_screen_t *qxl);
 void qxl_io_flush_surfaces(qxl_screen_t *qxl);
 void qxl_io_destroy_all_surfaces (qxl_screen_t *qxl);
+
+/*
+ * qxl_edid.c
+ */
+Bool qxl_output_edid_set(xf86OutputPtr output, int head, DisplayModePtr mode);
 
 #ifdef XSPICE
 /* device to spice-server, now xspice to spice-server */

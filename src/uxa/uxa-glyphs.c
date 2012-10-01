@@ -932,6 +932,11 @@ uxa_glyphs_via_mask(CARD8 op,
 
 	uxa_clear_pixmap(screen, uxa_screen, pixmap);
 
+	if (!uxa_pixmap_is_offscreen(pixmap)) {
+		screen->DestroyPixmap(pixmap);
+		return 1;
+	}
+	
 	component_alpha = NeedsComponent(maskFormat->format);
 	mask = CreatePicture(0, &pixmap->drawable,
 			      maskFormat, CPComponentAlpha,
@@ -987,8 +992,10 @@ uxa_glyphs_via_mask(CARD8 op,
 
 				if (!uxa_screen->info->prepare_composite(PictOpAdd,
 									 this_atlas, NULL, mask,
-									 src_pixmap, NULL, pixmap))
+									 src_pixmap, NULL, pixmap)) {
+				        FreePicture(mask, 0);
 					return -1;
+				}
 
 				glyph_atlas = this_atlas;
 			}
