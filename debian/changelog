@@ -1,4 +1,4 @@
-xserver-xorg-video-qxl (0.1.0-1) UNRELEASED; urgency=low
+xserver-xorg-video-qxl (0.1.0-1) experimental; urgency=low
 
   [ Maarten Lankhorst ]
   * New upstream release.
@@ -6,7 +6,7 @@ xserver-xorg-video-qxl (0.1.0-1) UNRELEASED; urgency=low
   [ Timo Aaltonen ]
   * control: Bump build-dep on libspice-protocol-dev to >= 0.12.2~.
 
- -- Maarten Lankhorst <maarten.lankhorst@canonical.com>  Thu, 19 Jul 2012 11:25:04 +0200
+ -- Liang Guo <guoliang@debian.org>  Tue, 22 Jan 2013 23:36:17 +0800
 
 xserver-xorg-video-qxl (0.0.17-2) unstable; urgency=low
 
