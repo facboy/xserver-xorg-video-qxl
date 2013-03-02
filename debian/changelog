@@ -5,6 +5,9 @@ xserver-xorg-video-qxl (0.1.0-1) experimental; urgency=low
 
   [ Timo Aaltonen ]
   * control: Bump build-dep on libspice-protocol-dev to >= 0.12.2~.
+  
+  [ Liang Guo ]
+  * Ignore automatically generated files when build packages.
 
  -- Liang Guo <guoliang@debian.org>  Tue, 22 Jan 2013 23:36:17 +0800
 
