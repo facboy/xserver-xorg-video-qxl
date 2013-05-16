@@ -23,7 +23,7 @@
 # Initialize Autoconf
 AC_PREREQ([2.60])
 AC_INIT([xf86-video-qxl],
-        [0.0.17],
+        [0.1.0],
         [https://bugs.freedesktop.org/enter_bug.cgi?product=xorg],
         [xf86-video-qxl])
 AC_CONFIG_SRCDIR([Makefile.am])
@@ -36,7 +36,7 @@ AC_CONFIG_HEADERS([config.h])
 
 # Require xorg-macros: XORG_DEFAULT_OPTIONS
 m4_ifndef([XORG_MACROS_VERSION],
-          [m4_fatal([must install xorg-macros 1.4 or later before running autoconf/autogen])])
+          [m4_fatal([you must install X.Org util-macros 1.4 or later (or the corresponding package from your distribution) before running autoconf/autogen])])
 XORG_MACROS_VERSION(1.4)
 XORG_DEFAULT_OPTIONS
 
@@ -105,13 +105,16 @@ fi
 AM_CONDITIONAL(BUILD_XSPICE, test "x$enable_xspice" = "xyes")
 AM_CONDITIONAL(BUILD_QXL, test "x$enable_qxl" = "xyes")
 
-PKG_CHECK_MODULES([SPICE_PROTOCOL], [spice-protocol >= 0.8.1])
+PKG_CHECK_MODULES([SPICE_PROTOCOL], [spice-protocol >= 0.12.0])
 
-AC_CHECK_FILE(.git, [
-    GIT_VERSION=`git log -1 --format=%h`
-    AC_DEFINE_UNQUOTED([GIT_VERSION], ["$GIT_VERSION"], [Defined if building from git])
-    ]
-)
+# AC_CHECK_FILE is not supported when cross compiling
+if test "$cross_compiling" = "no" ; then
+    AC_CHECK_FILE(.git, [
+        GIT_VERSION=`git log -1 --format=%h`
+        AC_DEFINE_UNQUOTED([GIT_VERSION], ["$GIT_VERSION"], [Defined if building from git])
+        ]
+    )
+fi
 
 AC_CONFIG_FILES([
                 Makefile

@@ -23,6 +23,10 @@
 /** \file qxl_ring.c
  * \author Søren Sandmann <sandmann@redhat.com>
  */
+#ifdef HAVE_CONFIG_H
+#include "config.h"
+#endif
+
 #include <string.h>
 #include <unistd.h>
 #include <stdlib.h>
@@ -127,4 +131,24 @@ qxl_ring_wait_idle (struct qxl_ring *ring)
 	usleep (1000);
 	mem_barrier();
     }
+}
+
+void
+qxl_ring_request_notify (struct qxl_ring *ring)
+{
+    ring->ring->header.notify_on_prod = ring->ring->header.prod + 1;
+    ErrorF("%s: requesting notify on prod %d\n", __func__,
+           ring->ring->header.notify_on_prod);
+}
+
+int
+qxl_ring_cons (struct qxl_ring *ring)
+{
+    return ring->ring->header.cons;
+}
+
+int
+qxl_ring_prod (struct qxl_ring *ring)
+{
+    return ring->ring->header.prod;
 }

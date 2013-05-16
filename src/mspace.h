@@ -9,10 +9,13 @@ extern "C" {
 
 //typedef unsigned long size_t;
 typedef void (*mspace_abort_t)(void *user_data);
-typedef void (*mspace_print_t)(void *user_data, char *format, ...);
+typedef void (*mspace_print_t)(void *user_data, const char *format, ...)  __attribute__((format(gnu_printf, 2, 3)));
 
 void mspace_set_abort_func(mspace_abort_t f);
 void mspace_set_print_func(mspace_print_t f);
+
+void default_abort_func(void *user_data);
+void default_print_func(void *user_data, const char *format, ...);
 
 /*
   mspace is an opaque type representing an independent
@@ -128,9 +131,12 @@ struct mallinfo mspace_mallinfo(mspace msp);
 
 /*
   mspace_malloc_stats behaves as malloc_stats, but reports
-  properties of the given space.
+  properties of the given space. The return variant returns instead of
+  printing the three quantities, maxfp, fp, and used.
 */
 void mspace_malloc_stats(mspace msp);
+void mspace_malloc_stats_return(mspace msp, size_t *ret_maxfp, size_t *ret_fp,
+                                size_t *ret_used);
 
 /*
   mspace_trim behaves as malloc_trim, but

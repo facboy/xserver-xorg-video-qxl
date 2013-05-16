@@ -20,7 +20,7 @@ Build-Depends:
  libtool,
  xutils-dev (>= 1:7.5),
  quilt (>= 0.46-7~),
- libspice-protocol-dev (>= 0.8.1~),
+ libspice-protocol-dev (>= 0.12.2~),
  libspice-server-dev [amd64],
  python,
 Standards-Version: 3.9.3

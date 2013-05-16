@@ -1,3 +1,1102 @@
+commit d8bb331784792bfd35bf158875b434243f0fe019
+Author: Søren Sandmann Pedersen <ssp@redhat.com>
+Date:   Thu Sep 20 19:11:55 2012 -0400
+
+    Version bump to 0.1.0
+
+commit 6520293e1e1f57bafbcf99592e766f810ce3ad2d
+Author: Søren Sandmann Pedersen <ssp@redhat.com>
+Date:   Thu Sep 20 16:26:36 2012 -0400
+
+    Make the checks for composite and a8 return FALSE for Xspice
+    
+    They depend on the PCI revision which is not available for Xspice.
+
+commit 7f0b820d919eb944eae201de03b186bd247b0324
+Author: Jeremy White <jwhite@codeweavers.com>
+Date:   Wed Sep 12 10:38:41 2012 -0500
+
+    Only use dixScreenSpecificPrivatesSize if we have a new enough Xorg.
+    
+    This lets us continue to support older Xorg releases.
+    This reverts 4f37cd85 and partially reverts 4a43bd4.
+
+commit fb038eb37906eba9a88e0cb6622a59f06dcc2a68
+Author: Søren Sandmann <ssp@redhat.com>
+Date:   Wed Sep 12 12:54:06 2012 -0400
+
+    Don't issue composite commands or create a8 surfaces when not available
+    
+    When the device or the client are not capable of composite commands or a8
+    surfaces, don't issue these commands.
+
+commit 4f37cd854f128714b8fcf3c0ab8afd72986407a0
+Author: Johannes Obermayr <johannesobermayr@gmx.de>
+Date:   Fri Sep 7 18:05:21 2012 +0200
+
+    Require XServer >= 1.12.99.901 in conjunction with commit 4a43bd4.
+
+commit 7059cff787eef80f3d3345de705e912b292a9f97
+Author: Søren Sandmann <ssp@redhat.com>
+Date:   Thu Jul 12 09:53:31 2012 -0400
+
+    Add Render support
+    
+    This commit adds support for using the new Composite command in spice
+    protocol 0.12.0. This command is similar to the Composite request in
+    the X Render protocol.
+    
+    By implementing the UXA composite stubs, we get acceleration for most
+    common Composite requests, including glyphs.
+
+commit 2fecf3a171e64ca0dad5653ed740409dc5af2edf
+Author: Søren Sandmann <ssp@redhat.com>
+Date:   Tue Dec 20 09:01:17 2011 -0500
+
+    Enable 8 bit pixmaps.
+    
+    a8 surfaces are now supported with the 8BIT_A format in spice, so we
+    can have support 8 bit pixmaps.
+
+commit 37c97620da959d9214abfc760835aa3031d54daa
+Author: Søren Sandmann <ssp@redhat.com>
+Date:   Sun Aug 12 11:03:16 2012 -0400
+
+    Use an RGBA format for 32 bit images
+    
+    With the upcoming Render changes, we can no longer assume that the
+    fourth channel of images is unused.
+
+commit 1e89aab2dc0beb01f43a2397faa05a8cd01a7547
+Author: Søren Sandmann <ssp@redhat.com>
+Date:   Wed Aug 22 15:27:09 2012 -0400
+
+    uxa: Plug leak in uxa_glyphs_via_masks
+    
+    If prepare_composite() fails, we need to free the temporary mask
+    before returning.
+
+commit afd8d20b84a4b4e9b22483e379d594517333e8c7
+Author: Søren Sandmann <ssp@redhat.com>
+Date:   Tue Aug 14 14:20:11 2012 -0400
+
+    uxa-glyphs: don't prepare composite when dest is not offscreen
+    
+    It is possbible for a pixmap to not be in video memory after
+    uxa_clear_pixmap() was called. When this happens, we need to destroy
+    the pixmap and return 1 to indicate that the operation can't be
+    accelerated.
+
+commit e738d00e1fb3cd469f850765e2b42976c2a85764
+Author: Søren Sandmann <ssp@redhat.com>
+Date:   Tue Aug 21 12:56:52 2012 -0400
+
+    Improved support for memory debugging.
+    
+    Make all memory allocation functions take a string that will explain
+    what the memory will be used for. This allows debug print statements
+    to be added to the allocation functions and could later potentially be
+    used for more detailed statistics.
+
+commit 4a43bd436c58dae72f91905657a36158efc68907
+Author: Alon Levy <alevy@redhat.com>
+Date:   Thu Aug 23 18:28:03 2012 +0300
+
+    src/qxl_driver: use the new dixScreenSpecificPrivatesSize
+    
+    xserver introduces a new screen specific privates infrastructure, moving
+    the PRIVATE_PIXBUF over there, breaking qxl that was using the wrong
+    dixPrivatesSize to access it - there is a new array of screen specific/not
+    flags, and PRIVATE_PIXBUF is screen specific.
+    
+    xorg-xserver commit: 9d457f9c55f12106ba44c1c9db59d14f978f0ae8
+    
+    This fix breaks backward compat. The next release will only work with
+    xorg-xserver >= 1.12.99.901
+    
+    RHBZ: 844463
+
+commit 0998bf63cd6c69a98f67094eba4e4edd2bf2a906
+Author: Søren Sandmann Pedersen <ssp@redhat.com>
+Date:   Thu Aug 23 17:24:51 2012 -0400
+
+    Coding style fixes
+    
+    Undo most of the damage from 7f8d3ed05cbe891
+
+commit 5554358fa3baf6616159b65f2f65a138f401aaf8
+Author: Søren Sandmann Pedersen <ssp@redhat.com>
+Date:   Thu Aug 23 17:22:58 2012 -0400
+
+    Bump spice-protocol version requirement to 0.12.0
+
+commit a261befde42d21f3fa9e4a56f121203cc67f3831
+Author: Alon Levy <alevy@redhat.com>
+Date:   Thu Aug 23 17:27:20 2012 +0300
+
+    qxl_driver: Xspice: fix build breakage
+
+commit c1b537fcafc3b9121d8c79cf5e98566158f34ab6
+Author: Marc-André Lureau <marcandre.lureau@gmail.com>
+Date:   Sun Jul 15 09:38:55 2012 -0400
+
+    Return a preferred mode matching the current mode
+    
+    This make gnome-settings-daemon not switch resolution automatically to
+    the largest available.
+
+commit ef4f158a18f03444d358b5ece39db636f76365f9
+Author: Marc-André Lureau <marcandre.lureau@gmail.com>
+Date:   Fri Jul 13 08:20:33 2012 -0400
+
+    Change output status when update monitors config
+
+commit 907d0ff0b0f6934d37fbab4a6889295d70ae3496
+Author: Marc-André Lureau <marcandre.lureau@gmail.com>
+Date:   Sun Jul 8 15:35:23 2012 -0400
+
+    Bypass rrcrtc.c screen size bounds check
+
+commit 557e23e82b6d738fab6fa6bd28b077dd81437b22
+Author: Marc-André Lureau <marcandre.lureau@gmail.com>
+Date:   Fri Jul 6 08:06:10 2012 -0400
+
+    Avoid calling qxl_update_monitors_config() with invalid config
+    
+    During startup, the monitors are not yet enabled/set. and we
+    can avoid sending invalid/transient config.
+
+commit 47b54dcfd9ba2aa78e0f154a288321bb0ff98dce
+Author: Marc-André Lureau <marcandre.lureau@gmail.com>
+Date:   Fri Jul 6 08:05:11 2012 -0400
+
+    Split crtc_set_mode_major()
+    
+    Avoid sending many monitor config changes during qxl_create_desired_modes()
+
+commit 6ee541636b6ed6846074afeb1c32d9e8e6a9bdda
+Author: Marc-André Lureau <marcandre.lureau@gmail.com>
+Date:   Fri Jul 6 08:02:21 2012 -0400
+
+    Add check_crtc() helper, to catch crtc/monitor config errors
+
+commit 7f8d3ed05cbe8914910e49b49ec44df15562bd16
+Author: Marc-André Lureau <marcandre.lureau@gmail.com>
+Date:   Wed Jul 4 14:56:07 2012 -0400
+
+    Coding style improvement
+
+commit f9980eec2287a01a918ff073a45f13d9dc66a1c6
+Author: Marc-André Lureau <marcandre.lureau@gmail.com>
+Date:   Wed Jul 4 14:01:45 2012 -0400
+
+    get rid of one of the gcc warnings
+
+commit 6c63d799a2b0f69485938dbae7975bf913284a23
+Author: Alon Levy <alevy@redhat.com>
+Date:   Wed Jun 27 15:53:41 2012 +0300
+
+    qxl_driver/qxl_initialize_x_modes: remove modes not fitting framebuffer
+
+commit f493653a5e09ae0e0fe1a5f70c3aba1dc9fe86fe
+Author: Alon Levy <alevy@redhat.com>
+Date:   Mon Jun 25 17:09:20 2012 +0300
+
+    qxl_driver: add infra for surface0 resizing
+    
+    Most importantly, don't allow randr resize if it is too large for the
+    currently allocated mspace. Ifdeffed out almost working code for
+    reallocating the primary mspace (qxl->mem).
+
+commit 75619d076bb029b76bed7a885864e191c386aa23
+Author: Alon Levy <alevy@redhat.com>
+Date:   Wed Jun 27 12:11:41 2012 +0300
+
+    add qxl_edid
+    
+    Taken from Virtual Box, following exactly the same logic:
+    gnome-settings-daemon relies on the serial given in the edid to set the
+    resolution to the same one last used on that screen. Since this is not
+    what we want with a virtual machine, we produce a serial that is
+    different for every resolution.
+
+commit de547245e75ea88f780205da072967bff119a636
+Author: Alon Levy <alevy@redhat.com>
+Date:   Mon Jun 25 16:13:29 2012 +0300
+
+    (for later) qxl_ring: add helpers (debugging/unused)
+
+commit b4e3f07474c919af0e484a71fb86c788a703ad8c
+Author: Alon Levy <alevy@redhat.com>
+Date:   Mon Jun 25 16:20:31 2012 +0300
+
+    qxl_driver: qxl_init_randr: limit width/height to 8192, real check done on randr screen resize callback
+
+commit d85e07921dda5e5401a336d415e8deee4b663252
+Author: Marc-André Lureau <marcandre.lureau@gmail.com>
+Date:   Wed Jul 4 11:30:58 2012 -0400
+
+    Add some error message if pci revision < 4
+
+commit e6bfdd035f3692b712496069b9361d010526802a
+Author: Alon Levy <alevy@redhat.com>
+Date:   Wed Jun 27 14:33:46 2012 +0300
+
+    qxl_driver: introduce qxl_crtc, crtc private
+    
+    Additionally prevents disabling of the primary crtc.
+
+commit f106ea65cde61c8f3cf5819d8c127fb7912ec067
+Author: Alon Levy <alevy@redhat.com>
+Date:   Mon Apr 30 18:35:59 2012 +0300
+
+    qxl_driver: implement randr, arbitrary resolution, multiple monitors (big dump)
+    
+    Send a MonitorsUpdate - this should definitely be split into it's own
+    patch.
+    
+    Require revision 4 - this is needed just for MonitorsUpdate, should go
+    with it.
+    
+    Adds new config: OPTION_NUM_HEADS, defaults to 4.
+
+commit 21e5719f74749fa6187539dc0805cb12759d66da
+Author: Alon Levy <alevy@redhat.com>
+Date:   Thu May 24 09:56:06 2012 +0300
+
+    qxl_surface: add download_box_no_update
+
+commit 26b8b350628ec053217715e7a9cb77ff56e4f56e
+Author: Alon Levy <alevy@redhat.com>
+Date:   Thu May 24 09:55:27 2012 +0300
+
+    qxl_surface: normalize surface_send names, add option to surface_destroy to send/not send destroy message
+
+commit 1db72fdf45a3ebbf7f0687671c1def75309b9499
+Author: Alon Levy <alevy@redhat.com>
+Date:   Wed May 23 20:44:51 2012 +0300
+
+    spiceqxl_io_port: mark FLUSH_SURFACES_ASYNC as unimplemented, do half of it
+
+commit 5d78c4cac24ad3830dba1900d5d879551dcbb407
+Author: Alon Levy <alevy@redhat.com>
+Date:   Wed May 23 21:23:09 2012 +0300
+
+    qxl_screen_init: move uxa_resources_init down to after qxl_switch_mode has run
+
+commit f246a251f88dab6a9db83e2d8bbd699e29950459
+Author: Alon Levy <alevy@redhat.com>
+Date:   Wed May 23 21:20:23 2012 +0300
+
+    qxl_close_screen: disable fb access, prevent segfaults in uxa later on
+    
+    I don't have a stacktrace to show any segfault unfortunately.
+
+commit 6dedd9a3f997c0112e71cfd0b28465348dfbbc36
+Author: Alon Levy <alevy@redhat.com>
+Date:   Mon Jun 25 17:08:11 2012 +0300
+
+    qxl_driver: move mspace_set_*_func earlier
+
+commit f838df1589c63fba8e99200238cf0b4e3acac6b1
+Author: Alon Levy <alevy@redhat.com>
+Date:   Tue May 29 17:24:50 2012 +0300
+
+    fix two segfaults in qxl_free_surface
+    
+    Both results from ProcFreePixmap being called in unanticipated
+    circumstances:
+    
+     cache->all_surfaces is NULL
+     surface->host_image is NULL
+    
+    To reproduce the following scripts work, in tandem:
+    
+    create xterms, destroy them
+    chvt
+    
+    ============ xterm_test ============
+    import os
+    import subprocess
+    import time
+    import atexit
+    
+    env = os.environ
+    env['DISPLAY'] = ':0.0'
+    xterms = []
+    
+    def kill_all():
+    	print "killing xterms"
+    	for x in xterms:
+    		x.kill()
+    	del xterms[:]
+    
+    atexit.register(kill_all)
+    while True:
+    	for i in range(10):
+    		xterms.append(subprocess.Popen(['xterm', '+u8']))
+    	time.sleep(1)
+    	kill_all()
+    
+    ============= chvt_test_helper ============
+    XPID=`pgrep Xorg`
+    XTTY=`find /proc/$XPID/fd -lname "/dev/tty*"`
+    XTTY=`readlink $XTTY`
+    XTTY=${XTTY#/dev/tty}
+    echo "chvt 1 (from Xorg)"
+    chvt 1
+    sleep 2
+    echo "chvt $XTTY (to Xorg)"
+    chvt $XTTY
+    
+    ============== chvt_test =================
+    while true; do ./chvt-test ; sleep 3; done
+
+commit c60681561c9cf8317be4e84ac8ac2bb465e13eb0
+Author: Alon Levy <alevy@redhat.com>
+Date:   Mon Jun 11 10:13:39 2012 +0300
+
+    qxl: remove qxl_screen_t->stride
+
+commit 203f579fed5e0c8a9970bfabebc84c7d84578ee5
+Author: Alon Levy <alevy@redhat.com>
+Date:   Wed Jun 27 12:07:16 2012 +0300
+
+    spiceqxl_inputs: don't hide the pointer global typedef
+
+commit 5706a3765bead75999f6d0ca0b17fed6c30ad7ef
+Author: Alon Levy <alevy@redhat.com>
+Date:   Wed Jun 27 11:06:17 2012 +0300
+
+    uxa: fix bad argument type from removed index API change (s/SCREEN_ARG_TYPE/SCRN_ARG_TYPE/)
+
+commit ea676f67d4c8fc863a711fb8630c1afccfa0561c
+Author: Alon Levy <alevy@redhat.com>
+Date:   Wed Jun 27 12:19:01 2012 +0300
+
+    whitespace fix
+
+commit de66207883efc1f32e96907c3e64f17b2bdf6c3e
+Author: Alon Levy <alevy@redhat.com>
+Date:   Sun Jul 8 14:05:08 2012 +0300
+
+    qxl_driver/qxl_switch_mode: destroy is not idempotent
+
+commit 6267b1a56f6104409fcb970eddc4ea9606421331
+Author: Alon Levy <alevy@redhat.com>
+Date:   Wed Mar 7 14:30:58 2012 +0200
+
+    spiceqxl_display: reformat & rephrase Xspice comment
+
+commit e0f301fc0512502542573b3f8dd9452f5a7ea6e1
+Author: Jeremy White <jwhite@codeweavers.com>
+Date:   Wed Jun 13 17:04:12 2012 -0500
+
+    Compute totalPixmapSize using the same logic as in dix/pixmap.c, rather than hard coding 100.
+    
+    This was found while building with a modified X server; one with a PixmapRec size of 224, not 64 :-/.
+
+commit 6832c0fd917556c52f56f8e82706a83942ed3dc1
+Author: Jeremy White <jwhite@codeweavers.com>
+Date:   Sun Jun 3 10:28:05 2012 -0500
+
+    Actually process write watches in the wakeup handler
+    
+    My apologies for the churn; this is, I think, a slightly better patch than
+    my previous patch, 'Process watches even when there is no X activity', in that
+    it avoids doing an extra polling select when we're idle.
+
+commit 72a0def8114073c0051f3df880f731d3968cb344
+Author: Alon Levy <alevy@redhat.com>
+Date:   Wed May 30 13:44:40 2012 +0300
+
+    qxl_switch_mode: don't evacuate, just recreate primary surface
+    
+    In summary, on vt enter we still:
+     reset
+     recreate memory slots
+     clear our mspace allocators
+     and then do what switch mode below says
+    
+    On vt leave we still:
+     reset (this is redundant since the first VGA access will trigger a
+     reset on the device side)
+    
+    On switch mode however we only:
+     destroy primary surface
+     create primary surface (different size)
+
+commit 8df3eba368e80f60ce815300b85a567a9b02141c
+Author: Alon Levy <alevy@redhat.com>
+Date:   Thu May 31 13:04:01 2012 +0300
+
+    qxl_surface: don't unlink surface 0
+    
+    The primary surface, i.e. qxl->primary, the only surface with id==0, is
+    allocated in qxl_surface_cache_create_primary with prev==next==NULL.
+    Unlinking it was producing a wrong cache->free_surfaces == NULL. This
+    was not a problem because unlinking the primary only happened in
+    switch_host, which then called surface_cache_init. In a following commit
+    switch_host is simplified to destroy-primary+create-primary, so this bug
+    needs to be fixed first to avoid leaking surfaces and reaching a no
+    surface available situation.
+
+commit 22157d4750f9090927d2e3473aa3d3a4f5232792
+Author: Alon Levy <alevy@redhat.com>
+Date:   Thu May 31 13:03:54 2012 +0300
+
+    qxl_surface: add DEBUG_SURFACE_LIFECYCLE helpers
+
+commit 0f817bb4e1b4e33ef50c0399c92f1cc091840ef5
+Author: Alon Levy <alevy@redhat.com>
+Date:   Tue May 29 12:25:12 2012 +0300
+
+    io: add qxl_io_destroy_primary
+
+commit 326b80974b4080ed7519801f7d1c96077f5ae0b9
+Author: Alon Levy <alevy@redhat.com>
+Date:   Wed May 23 20:50:46 2012 +0300
+
+    prefix io with qxl_io, add several
+
+commit 73981e02c90cc81dd462f9fc2a00b5b11a9eab00
+Author: Alon Levy <alevy@redhat.com>
+Date:   Wed May 23 20:52:48 2012 +0300
+
+    qxl.h: add device_primary tri state UNDEFINED/NONE/CREATED
+
+commit b600edc48270a4a368add11ec02e6d365d5da60d
+Author: Alon Levy <alevy@redhat.com>
+Date:   Thu May 24 00:08:38 2012 +0300
+
+    qxl_surface: logging: add function name to ErrorF
+
+commit 3a87e765d91a26ead2cfc5ddad1ba4f3e7d21922
+Author: Alon Levy <alevy@redhat.com>
+Date:   Thu May 24 11:00:49 2012 +0300
+
+    qxl_surface: cosmetics
+
+commit 60478640a6c4d74c44fdf67350be6e180960cf5f
+Author: Alon Levy <alevy@redhat.com>
+Date:   Wed May 23 21:23:26 2012 +0300
+
+    qxl_pre_init: memset qxl struct
+
+commit 9d929ae1d1bb2e7f03221fcc4d70e761b6ff9242
+Author: Alon Levy <alevy@redhat.com>
+Date:   Wed May 23 20:46:34 2012 +0300
+
+    qxl_driver: abort on mspace error, don't spin (default abort function)
+
+commit 6aa3ceb2d3f25726424b03a68ef949deadf7125a
+Author: Alon Levy <alevy@redhat.com>
+Date:   Wed May 23 20:44:06 2012 +0300
+
+    mspace: add mspace_malloc_stats_return
+
+commit 5e505dc6572ee29d0ebe912a8160a8e09bfb5d3e
+Author: Alon Levy <alevy@redhat.com>
+Date:   Tue May 29 13:46:34 2012 +0300
+
+    qxl_leave_vt: change outb to ioport_write (easier to grep / breakpoint on a single point)
+
+commit 67f86dc1e824d00a06bdc51ba4c3e88cfbd82292
+Author: Alon Levy <alevy@redhat.com>
+Date:   Tue May 29 13:45:29 2012 +0300
+
+    rename qxl_reset to qxl_reset_and_create_mem_slots
+
+commit 21c1d576925e561551b91b44b0d286f0bdc689c4
+Author: Alon Levy <alevy@redhat.com>
+Date:   Wed May 23 20:54:44 2012 +0300
+
+    qxl_mem: add debug flags, simple accounting and valgrind enabled
+    
+    adds preprocessor definitions DEBUG_QXL_MEM & DEBUG_QXL_MEM_VERBOSE
+
+commit a313b5ef1b5b6dda1e6c0ab47f458d692a5462f7
+Author: Alon Levy <alevy@redhat.com>
+Date:   Wed May 30 10:46:54 2012 +0300
+
+    qxl_surface: handle destroyed pixmaps while evacuated
+    
+    Prevent access to freed memory when:
+    1. qxl_leave_vt/qxl_surface_cache_evacuate_all freed cache->all_surfaces
+    2. ProcRenderDispatch/damageDestroyPixmap/qxl_destroy_pixmap/qxl_surface_kill
+    access a surface that pointed inside the all_surfaces array
+    
+    Solution in this patch:
+    1. never free all_surfaces
+    2. add an 'evacuated' field per surface, initialized to NULL, set during
+    evacuation.
+    3. on qxl_surface_kill, if surface->evacuated is set, don't destroy the
+    surface (it is already destroyed by this point via a reset in
+    qxl_surface_cache_evacuate_all's caller, qxl_leave_vt), just unref the
+    host pixmap, free the evacuated_surface_t and unlink it from the
+    evacuated linked list, so it isn't recreated later on
+    qxl_surface_cache_replace_all.
+
+commit c47ebff71878458ff6157aec7252999a6578fb97
+Author: Alon Levy <alevy@redhat.com>
+Date:   Wed May 30 10:09:47 2012 +0300
+
+    qxl_driver: hide cursors on vt switch
+    
+    This is not enough to prevent any qxl_destroy_pixmap call during vt
+    switch, but it prevents those triggered by CursorDisplayCursor.
+    
+    Note: a matching xf86_show_cursors call doesn't hurt, but is not
+    required, so not adding it.
+    
+    It is still possible to access freed memory by the following trigger:
+    
+    ==4416== Invalid read of size 8
+    ==4416==    at 0x5D15EC1: unlink_surface (qxl_surface.c:685)
+    ==4416==    by 0x5D162F9: qxl_surface_kill (qxl_surface.c:799)
+    ==4416==    by 0x5D12688: qxl_destroy_pixmap (qxl_driver.c:928)
+    ==4416==    by 0x55730B: damageDestroyPixmap (damage.c:1556)
+    ==4416==    by 0x51C77B: ShmDestroyPixmap (shm.c:273)
+    ==4416==    by 0x54591B: FreePicture (picture.c:1465)
+    ==4416==    by 0x467A32: doFreeResource (resource.c:873)
+    ==4416==    by 0x467B7E: FreeResource (resource.c:903)
+    ==4416==    by 0x547742: ProcRenderFreePicture (render.c:661)
+    ==4416==    by 0x54B13A: ProcRenderDispatch (render.c:1988)
+    ==4416==    by 0x430670: Dispatch (dispatch.c:428)
+    ==4416==    by 0x492604: main (main.c:288)
+    ==4416==  Address 0x121031e0 is 116,960 bytes inside a block of size 122,880 free'd
+    ==4416==    at 0x4A079AE: free (vg_replace_malloc.c:427)
+    ==4416==    by 0x5D16BDA: qxl_surface_cache_evacuate_all (qxl_surface.c:1060)
+    ==4416==    by 0x5D13078: qxl_leave_vt (qxl_driver.c:1209)
+    ==4416==    by 0x4A4D4F: xf86VTSwitch (xf86Events.c:462)
+    ==4416==    by 0x4A4926: xf86Wakeup (xf86Events.c:285)
+    ==4416==    by 0x43E2E1: WakeupHandler (dixutils.c:421)
+    ==4416==    by 0x488A75: WaitForSomething (WaitFor.c:224)
+    ==4416==    by 0x4303CF: Dispatch (dispatch.c:357)
+    ==4416==    by 0x492604: main (main.c:288)
+    
+    This is fixed by a following patch to not free all_surfaces, instead
+    keeping pointers from it to the evacuated list.
+
+commit fdf2274c9ff15fc5108b400b71120184d2651a21
+Author: Alon Levy <alevy@redhat.com>
+Date:   Mon May 21 11:31:23 2012 +0300
+
+    qxl_surface: remove redundant qxl_garbage_collect, qxl_allocnf calls it
+
+commit b26640c2d24e6094487ea323a08b539d66050d89
+Author: Alon Levy <alevy@redhat.com>
+Date:   Tue May 29 13:47:44 2012 +0300
+
+    uxa-damage: remove unnecessary include (doesn't fix any warnings)
+
+commit 8faf24226a20901e7a29019c922359365501ba69
+Author: Alon Levy <alevy@redhat.com>
+Date:   Tue May 29 13:09:46 2012 +0300
+
+    uxa: remove unnecessary includes, reduces warnings due to duplicate definitions
+
+commit bb1b5865bc02341cfa1cc0d943fac59077643ea5
+Author: Dave Airlie <airlied@redhat.com>
+Date:   Wed Jun 6 17:17:09 2012 +0100
+
+    qxl: fix spice build
+    
+    reported by jenkins.
+    
+    Signed-off-by: Dave Airlie <airlied@redhat.com>
+
+commit f1a9c1b33bff038807755824190c69889ef6d794
+Author: Dave Airlie <airlied@redhat.com>
+Date:   Wed Jun 6 14:19:04 2012 +0100
+
+    qxl: add API compat for latest X server.
+    
+    Signed-off-by: Dave Airlie <airlied@redhat.com>
+
+commit 40dc75db615c1161c38874c145770b8d77a995ad
+Author: Yonit Halperin <yhalperi@redhat.com>
+Date:   Mon Apr 23 09:04:36 2012 +0300
+
+    Do not call update_area when lacking device memory
+    
+    The QXL_IO_NOTIFY_OOM is intended exactly for handling occurrences of
+    lacking memory. The spice server tries to first release resources that
+    are no longer in the current tree (and thus, do not need rendering).
+    It renders drawables only as a last resort. And even then,
+    it does not update the whole primary surface, but rather renders
+    the oldest X drawables.
+    The call to update_area is redundant, and its effect on performance
+    is noticeable when playing full screen video.
+    
+    Signed-off-by: Yonit Halperin <yhalperi@redhat.com>
+
+commit 1ad5c8633cc52aef5aa8a58bf529859caa8d1bd9
+Author: Christophe Fergeau <cfergeau@redhat.com>
+Date:   Wed Apr 25 16:18:19 2012 +0200
+
+    Distribution-agnostic XORG_MACROS_VERSION check message
+
+commit b3caf8621d798ea3c5140b8adc193121c4c13c4a
+Author: Yaniv Kaul <ykaul@redhat.com>
+Date:   Tue Apr 24 13:22:41 2012 +0300
+
+    Change xorg-macros -> xorg-x11-util-macros in configure error message
+    
+    At least in Fedora 17, the correct RPM name is xorg-x11-util-macros
+
+commit 315c7de54699a883ba91f906ab59985e4e5426c2
+Author: Alon Levy <alevy@redhat.com>
+Date:   Mon Apr 9 12:27:21 2012 +0300
+
+    qxl_driver: ifdef out qxl_wait_for_io_command if not XSPICE
+
+commit 5eae282231a7cd727ad3f3576ed0574a29d949b1
+Author: Alon Levy <alevy@redhat.com>
+Date:   Mon Apr 9 12:18:36 2012 +0300
+
+    qxl_surface.c: fix -Wshadow warning
+    
+    qxl_surface.c:735:6: warning: declaration of 'i' shadows a previous
+    local [-Wshadow]
+
+commit a4773c508735ec3e9779c46e966a07d388e265dc
+Author: Alon Levy <alevy@redhat.com>
+Date:   Wed Apr 4 15:45:12 2012 +0300
+
+    mspace: no more warnings
+
+commit 01f77c0c42e2b9058e48a9ac4ae171609119ce12
+Author: Alon Levy <alevy@redhat.com>
+Date:   Wed Apr 4 16:07:47 2012 +0300
+
+    spiceqxl_io_port: use pointer_to_u64 (fix warning)
+
+commit aa6cf3db29886ce964b9a5793e7ed0af6f213b57
+Author: Alon Levy <alevy@redhat.com>
+Date:   Wed Apr 4 16:07:29 2012 +0300
+
+    spiceqxl_io_port: use attribute printf (fix warning)
+
+commit f7949ea1488223b8fcbfd1cba2d344d811ee62ca
+Author: Alon Levy <alevy@redhat.com>
+Date:   Tue Apr 24 12:11:42 2012 +0300
+
+    qxl_surface: qxl_surface_prepare_access: remove assigned but unused variables
+
+commit ae50a549d6169d806105a2d6b8220002fda5d9de
+Author: Alon Levy <alevy@redhat.com>
+Date:   Fri Apr 6 10:30:12 2012 +0300
+
+    spiceqxl: Xspice is spelled with a lower s
+
+commit ea37df4b4bccd4e2b9dbd590607737b18ec11ee9
+Author: Alon Levy <alevy@redhat.com>
+Date:   Sun Apr 15 11:53:51 2012 +0300
+
+    README.xspice: updpate repository
+    
+    Reported by: Michael Tokarev <mjt@isrv.corpit.ru>
+
+commit fe74d8a89534d92a2151ee3ac28de3d5864a874e
+Author: Alon Levy <alevy@redhat.com>
+Date:   Thu Mar 8 16:16:20 2012 +0200
+
+    protect AC_CHECK_FILE for cross compiling
+    
+    Signed-off-by: Alon Levy <alevy@redhat.com>
+
+commit 810d92db84d0e11260ec3abc936dacac113fcbba
+Author: Dave Airlie <airlied@redhat.com>
+Date:   Sun Mar 18 20:47:41 2012 +0000
+
+    qxl: missed one file that needs config.h
+
+commit 34ccb90f6b635b45080e6e4868314fa80a662fc2
+Author: Dave Airlie <airlied@redhat.com>
+Date:   Sun Mar 18 20:42:38 2012 +0000
+
+    qxl: fix config.h usage
+    
+    You have to include config.h at top of each C file, not inside a header file.
+    
+    Signed-off-by: Dave Airlie <airlied@redhat.com>
+
+commit b75eed01fa7514c15f4379092a93ecf8478f0b48
+Author: Søren Sandmann Pedersen <ssp@redhat.com>
+Date:   Thu Mar 15 13:49:52 2012 -0400
+
+    Version bump to 0.0.17
+
+commit c358c7f199bfeb519e08b0903438e43b1afd02c1
+Author: Søren Sandmann Pedersen <ssp@redhat.com>
+Date:   Thu Mar 15 13:49:42 2012 -0400
+
+    Add qxl_option_helper.h to Makefile.am
+
+commit 81bee3d3491ab6b31b0d69207729280e86138d50
+Author: Søren Sandmann Pedersen <ssp@redhat.com>
+Date:   Thu Mar 15 13:42:04 2012 -0400
+
+    In qxl_prepare_access(), don't modify the width/height of the pixmap
+    
+    The width and height were not properly restored, which caused
+    GetDrawableInfo() to return bogus results, which caused GNOME shell
+    crashes.
+    
+    Signed-off-by: Soren Sandmann <ssp@redhat.com>
+
+commit 773fbda754de2dd91f8b6bfe754d1aa59368072b
+Author: Søren Sandmann Pedersen <ssp@redhat.com>
+Date:   Wed Mar 14 12:38:03 2012 -0400
+
+    qxl_surface.c: Remove #if 0'd debug spew
+
+commit 4724bb7922e1bb193117f13ffbd69fa4f97a29fb
+Author: Søren Sandmann Pedersen <ssp@redhat.com>
+Date:   Fri Mar 9 12:09:17 2012 -0500
+
+    options: Turn surfaces and caching on by default
+
+commit babe13196137f339b6f55c6382f7bd1c11100ec2
+Author: Alon Levy <alevy@redhat.com>
+Date:   Thu Feb 16 15:55:21 2012 +0200
+
+    missed when added qxl_option_helpers.c
+
+commit 70d0d49b7c7d115f297dae710b9bb62b97fa22d5
+Author: Alon Levy <alevy@redhat.com>
+Date:   Sun Jan 22 19:26:11 2012 +0200
+
+    replace lookup3 with MurmurHash3
+    
+    See http://code.google.com/p/smhasher/wiki/MurmurHash3
+    
+    Performance quotes from there are 2.5 times what lookup3 can do, for
+    32 bit variant, which is what we use:
+    
+    Lookup3_x86_32       - 1234 mb/sec
+    Lookup3_x64_32       - 1265 mb/sec
+    
+    MurmurHash3_x86_32   - 3105 mb/sec
+    
+    New files are released to the public domain, keeping them that way.
+    
+    My own comparison shows the added hash to be ~45% faster then the
+    existing one, see the tests at
+    https://gitorious.org/hash_tests/hash_tests
+
+commit 994ac381a57e7a9ec502371c6aa3f491c1f1165f
+Author: Alon Levy <alevy@redhat.com>
+Date:   Fri Feb 3 15:26:44 2012 +0100
+
+    xspice_keyboard_proc: fix arrow keys
+    
+    Not sure yet why the regression with the arrow keys not producing the
+    right keysym, but it appears that the keycode is correct for up (as an
+    example), 111, but the keysym being produced was 0xff6c and not the
+    correct 0xff52. This boiled down to the rules of the default rmlvo being
+    "base" instead of "evdev". Providing an rmlvo parameter to
+    InitKeyboardDeviceStruct allows to override that. The chosen
+     rules = "evdev"
+     model = "pc105"
+     layout = "us"
+    Is the default used by Xephyr from
+    xorg-x11-server-Xephyr-1.11.99.901-3.20120124.fc17.x86_64
+
+commit 8b3c5a5fac297226a467ea15c16cea8e5da51b8f
+Author: Alon Levy <alevy@redhat.com>
+Date:   Wed Feb 1 08:45:10 2012 +0200
+
+    introduce qxl_option_helpers.[ch]
+
+commit 96349ebb43e7de49b6b561b79d6fff5ada7aa4c7
+Author: Søren Sandmann <ssp@redhat.com>
+Date:   Thu Feb 9 16:54:29 2012 -0500
+
+    Don't leak the surface when we run out of video memory.
+    
+    Running out of video memory would cause send_create_surface() to
+    return NULL without putting the allocated surface back on the free
+    list. Fix this by not allocating the surface until after the video
+    memory is allocated, and, if surface allocation fails, freeing the
+    video memory.
+
+commit c5ab0b538bd437e5e4aa86678d12a676c6edd1e8
+Author: Søren Sandmann <ssp@redhat.com>
+Date:   Thu Feb 9 16:51:56 2012 -0500
+
+    Move check for zero width/height surfaces to qxl_surface_create()
+
+commit 1a371d76e32b2b3612e37ae15684632c987699b7
+Author: Søren Sandmann <ssp@redhat.com>
+Date:   Tue Feb 7 14:36:05 2012 -0500
+
+    In qxl_check_copy() accept pixmaps that don't have surfaces
+    
+    UXA will correctly fall back to using PutImage if the pixmaps are not
+    in offscreen memory (ie., they don't have surfaces attached), so there
+    is no need to return FALSE in qxl_check_copy() just because the
+    pixmaps don't have surfaces associated with them.
+
+commit 5a6715a074abb5ab2eb0513038a1ba8bd577239e
+Author: Alon Levy <alevy@redhat.com>
+Date:   Tue Jan 31 00:23:27 2012 +0200
+
+    xf86PciInfo.h is deprecated and unused, drop it
+
+commit d07c8acc3057cc577a67d04dc8499e2996ed30b4
+Author: Alon Levy <alevy@redhat.com>
+Date:   Tue Jan 31 00:23:09 2012 +0200
+
+    qxl_image: cleanup qxl_image_create
+
+commit da1d595ad303b997343df91ebfb70c82c4bbb748
+Author: Alon Levy <alevy@redhat.com>
+Date:   Mon Jan 30 23:17:43 2012 +0200
+
+    Enable surface and caching option defaults for Xspice
+
+commit df89dc60feda16de907e93bf7da381873c01644f
+Author: Alon Levy <alevy@redhat.com>
+Date:   Mon Jan 30 23:14:32 2012 +0200
+
+    xspice: remove duplicate declaration (fixes warning)
+
+commit d6eedbdfbbb2eee8e6ff119dc0c12ff173a1cef6
+Author: Søren Sandmann Pedersen <ssp@redhat.com>
+Date:   Mon Jan 30 16:15:05 2012 -0500
+
+    Enable surface and caching options for XSpice too
+
+commit 4e68645a4d9a84d009b603d908e5b20a47db0724
+Author: Alon Levy <alevy@redhat.com>
+Date:   Sat Jan 28 13:47:20 2012 +0200
+
+    examples/spiceqxl.xorg.conf.example: fix in vm usage.
+    
+    RHBZ #785373
+    
+    workaround vmmouse segfault by disabling udev in
+    spiceqxl.xorg.conf.example.
+    We don't really need it anyway since we explicitly specify drivers for
+    video keyboard and mouse.
+
+commit 8ab5b7e0faa12bf5aa1575c5fd11230284f68d71
+Author: Søren Sandmann Pedersen <ssp@redhat.com>
+Date:   Tue Jan 17 11:35:04 2012 -0500
+
+    Enable caching of images based on the configuration options
+
+commit 57b5d7a1a20fb4f138131e644251d1a49ede94c8
+Author: Søren Sandmann Pedersen <ssp@redhat.com>
+Date:   Mon Jan 16 11:11:52 2012 -0500
+
+    Return NULL from qxl_surface_create() when surfaces are disabled
+
+commit 6acad24a8df389e72c923e02fedd615e56dfe15b
+Author: Søren Sandmann Pedersen <ssp@redhat.com>
+Date:   Mon Jan 16 10:54:57 2012 -0500
+
+    Add support for parsing various options
+    
+     - EnableImageCache
+     - EnableFallbackCache
+     - EnableSurfaces
+    
+    EnableImageCache will enable the use of caching for PutImage
+    requests. EnableFallbackCache will enable the use of caching for image
+    commands that are the result of fallback rendering.
+
+commit 1b5a3f606a16fd704cdbd296b29f7dc89faf8471
+Author: Søren Sandmann Pedersen <ssp@l3000.localdomain>
+Date:   Thu Jan 19 14:56:30 2012 -0500
+
+    Use u64_to_pointer() instead of a cast to void *
+
+commit 8aad7d4d95cd095e8e11cabbfde10b5d3b755a72
+Author: Søren Sandmann Pedersen <ssp@localhost.localdomain>
+Date:   Thu Jan 19 08:18:58 2012 -0500
+
+    Track damage for PolyLine fallbacks.
+    
+    This is a substantial speedup for the Gimp.
+
+commit c2ae430e572a1c7c8cebb8174482ded743a0b7f2
+Author: Alon Levy <alevy@redhat.com>
+Date:   Tue Jan 17 17:50:18 2012 +0200
+
+    qxl-driver: call vgaHWSetStdFuncs explicitly
+    
+    Previously it was called via vgaHWGetHWRec, since 1.11.99.901
+    it is no longer so. The relevant xserver commit:
+    
+       4bd6579188e718654c35f95623fd4772f9e0ef06
+       vgahw: Don't default to standard (port space) access routines
+    
+    From: Adam Jackson <ajax@redhat.com>
+
+commit 37230939c6ebebac1ee9ce0f3de66a9a22355ab0
+Author: Alon Levy <alevy@redhat.com>
+Date:   Fri Jan 13 17:15:42 2012 +0200
+
+    build fixes: sched_yield and missing declaration
+    
+    From: Adam Jackson <ajax@redhat.com>
+
+commit c02da3f529513fc42afce9185e41852b8ae1407a
+Author: Søren Sandmann Pedersen <ssp@redhat.com>
+Date:   Wed Jan 18 08:40:18 2012 -0500
+
+    Guard access to "pci" with #ifndef XPSICE
+
+commit 89f71d1be4a28e7bf0d60e3089b1f28202fb821f
+Author: Søren Sandmann Pedersen <ssp@redhat.com>
+Date:   Tue Jan 17 11:24:29 2012 -0500
+
+    Fix mis-merge
+    
+    qxl_reset() has to be defined before qxl_close_screen().
+
+commit 9600e4a0b57693da451f3f5ca61637d0275c3836
+Author: Søren Sandmann Pedersen <ssp@redhat.com>
+Date:   Wed Oct 5 12:27:27 2011 -0400
+
+    Reset non-primary device out of CloseScreen().
+    
+    Otherwise, client windows will linger even after the server shuts
+    down. Don't reset the primary device so that we can preserve the fonts
+    etc.
+
+commit e2fad1c9afe55ee9909a3ec8f142d2611f88b3f7
+Author: Søren Sandmann Pedersen <ssp@redhat.com>
+Date:   Sat Mar 19 12:47:52 2011 -0400
+
+    If qxl_pre_init() is called without a confScreen, just return FALSE.
+    
+    Otherwise, the driver crashes when called from Xorg -configure.
+
+commit 420876da9eafeece83e4719a469d2e1ce0b13478
+Author: Søren Sandmann Pedersen <ssp@redhat.com>
+Date:   Tue Aug 9 05:16:56 2011 -0400
+
+    Transmit images in smaller chunks
+    
+    This makes use of the 'chunks' feature of the SPICE protocol to send
+    images in chunks smaller than 512 * 512 bytes. This reduces the
+    likelihood of running out of memory when big image are transmitted.
+
+commit 5da2a6e4999265b717a7fd18039a90edcd9ba941
+Author: Alon Levy <alevy@redhat.com>
+Date:   Sun Dec 18 19:48:57 2011 +0200
+
+    configure.ac: support autoconf 2.63
+    
+    AC_CHECK_FILE(cond,[not-empty],[]) in autoconf 2.63 produces an empty
+    else that is illegal for bash, but forgoes the else when given a
+    AC_CHECK_FILE(cond,[not-empty]). 2.68 produces correct output on both,
+    so it's unaffected.
+
+commit 10d122e7bc9a78be17b130c27495564562bf0f93
+Author: Søren Sandmann Pedersen <ssp@redhat.com>
+Date:   Mon Dec 19 02:09:37 2011 -0500
+
+    Revert "Use new 8BIT_A format for 8 bit pixmaps."
+    
+    This reverts commit 8ea466a2f408524a9fcc08ed0a17f3c935857afa.
+    
+    (This change was pushed accidentally)
+
+commit 635a5887c52382b481de1ecca463a3fbb7fd6aa3
+Author: Søren Sandmann <ssp@redhat.com>
+Date:   Sat Dec 17 05:39:32 2011 -0500
+
+    Don't translate newly generated paccess region
+    
+    The region passed to uxa_prepare_access() is in screen coordinates,
+    but the driver wants drawable coordinates. Hence we do a translation.
+    
+    However, when the passed region is NULL, we generate the region
+    ourselves based on the full drawable extents. This region is already
+    in drawable space so shouldn't be translated.
+
+commit 8ea466a2f408524a9fcc08ed0a17f3c935857afa
+Author: Søren Sandmann <ssp@redhat.com>
+Date:   Tue Dec 13 03:51:35 2011 -0500
+
+    Use new 8BIT_A format for 8 bit pixmaps.
+
+commit 30b4b72cdbdf9f0e92a8d1c4e01779f60f15a741
+Author: Gerd Hoffmann <kraxel@redhat.com>
+Date:   Thu Oct 6 17:06:10 2011 +0200
+
+    support _ASYNC io calls and interrupt handling (busy wait)
+    
+    rebased with Xspice changes.
+    
+    Signed-off-by: Alon Levy <alevy@redhat.com>
+
+commit c77ba9f217093f946a4c6bf6edf9f34b24844d8d
+Author: Søren Sandmann <ssp@redhat.com>
+Date:   Fri Oct 28 12:56:30 2011 -0400
+
+    Translate the access region according to the drawable offset.
+    
+    The driver code expects to be given coordinates relative to the
+    offscreen pixmap.
+
+commit 0d3a9a626402ef0cc52430fe4cb35d7b5da68536
+Author: Alon Levy <alevy@redhat.com>
+Date:   Tue Aug 2 21:31:11 2011 +0300
+
+    rename xspice Xspice
+
+commit 38cedb7ad42f11fe451507d82922d4e94cdcf15d
+Author: Alon Levy <alevy@redhat.com>
+Date:   Mon Aug 1 19:17:48 2011 +0300
+
+    xspice: make --cgdb non magical, use XSPICE_ENABLE_GDB
+
+commit b89a0b11b1133bf2991580203867830747ad4de1
+Author: Søren Sandmann Pedersen <ssp@localhost.localdomain>
+Date:   Sun Aug 21 10:11:48 2011 -0400
+
+    Only save the VGA fonts for the primary device.
+    
+    Otherwise, if we try to save the VGA fonts when initializing a
+    non-primary device, the saving will be routed to the primary one
+    putting it into VGA mode, which then locks up.
+
+commit 4a040532492b212e05f5375994adcfdd171e0410
+Author: Søren Sandmann Pedersen <ssp@redhat.com>
+Date:   Tue Jul 26 13:44:30 2011 -0400
+
+    Ignore devices classes when matching PCI devices
+    
+    A device_class of 0x00030000 means we will only match VGA compatible
+    controllers, but when multiple devices are added to the VM, the
+    additional ones will have subclass 0x8000 ("Display controller").
+    
+    We need to be able to drive those too.
+
+commit 3b851a37a7030688fc8ee361167b3567e6623edf
+Author: Alon Levy <alevy@redhat.com>
+Date:   Sat Jul 23 20:31:11 2011 +0300
+
+    spiceqxl.xorg.conf.example: typo and order fixes
+
+commit c65af64529a7abd99bd175e1e49fb98f289fb55a
+Author: Alon Levy <alevy@redhat.com>
+Date:   Sat Jul 23 20:08:35 2011 +0300
+
+    README.xspice: use consistent and vnc default port
+
+commit f637c79f121348b02b0fdae7613675acda380815
+Author: Alon Levy <alevy@redhat.com>
+Date:   Sat Jul 23 20:07:04 2011 +0300
+
+    xspice: add missing --tls-port default
+
 commit dd90fa9277283b4806aba307ca952bea0402b534
 Author: Alon Levy <alevy@redhat.com>
 Date:   Sat Jul 23 12:55:42 2011 +0300
