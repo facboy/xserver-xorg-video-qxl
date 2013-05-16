@@ -1,6 +1,7 @@
 xserver-xorg-video-qxl (0.1.0-2) unstable; urgency=low
 
   * Upload to unstable
+  * Bump Standards-Version to 3.9.4 (no changes)
 
  -- Liang Guo <guoliang@debian.org>  Fri, 17 May 2013 07:19:32 +0800
 
