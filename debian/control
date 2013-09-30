@@ -21,7 +21,7 @@ Build-Depends:
  xutils-dev (>= 1:7.5),
  quilt (>= 0.46-7~),
  libspice-protocol-dev (>= 0.12.2~),
- libspice-server-dev [amd64],
+ libspice-server-dev [amd64 i386],
  python,
 Standards-Version: 3.9.4
 Homepage: http://spice-space.org/

@@ -25,7 +25,11 @@ override_dh_auto_configure:
 ifeq ($(DEB_HOST_GNU_TYPE), x86_64-linux-gnu)
 	dh_auto_configure -- --enable-xspice 
 else
+ifeq ($(DEB_HOST_GNU_TYPE), i486-linux-gnu)
+	dh_auto_configure -- --enable-xspice 
+else
 	dh_auto_configure 
+endif
 endif	
 
 %:
