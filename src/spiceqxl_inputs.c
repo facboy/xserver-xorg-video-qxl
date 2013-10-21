@@ -27,12 +27,12 @@
 #include "config.h"
 #endif
 
-#include <xorg/xf86Xinput.h>
-#include <xorg/exevents.h>
-#include <xorg/xserver-properties.h>
-#include <xorg/list.h>
-#include <xorg/input.h>
-#include <xorg/xkbsrv.h>
+#include <xf86Xinput.h>
+#include <exevents.h>
+#include <xserver-properties.h>
+#include <list.h>
+#include <input.h>
+#include <xkbsrv.h>
 #include <spice.h>
 #include "qxl.h"
 #include "spiceqxl_inputs.h"
@@ -46,9 +46,10 @@ void XSpicePointerUnInit(InputDriverPtr drv, InputInfoPtr pInfo, int flags);
 static
 void XSpiceKeyboardUnInit(InputDriverPtr drv, InputInfoPtr pInfo, int flags);
 
+static char xspice_pointer_name[] = "xspice pointer";
 static InputDriverRec XSPICE_POINTER = {
     1,
-    "xspice pointer",
+    xspice_pointer_name,
     NULL,
     XSpicePointerPreInit,
     XSpicePointerUnInit,
@@ -56,9 +57,10 @@ static InputDriverRec XSPICE_POINTER = {
     NULL /* defaults */
 };
 
+static char xspice_keyboard_name[] = "xspice keyboard";
 static InputDriverRec XSPICE_KEYBOARD = {
     1,
-    "xspice keyboard",
+    xspice_keyboard_name,
     NULL,
     XSpiceKeyboardPreInit,
     XSpiceKeyboardUnInit,
@@ -149,15 +151,20 @@ static void xspice_keyboard_control(DeviceIntPtr device, KeybdCtrl *ctrl)
     }
 }
 
+static char xspice_keyboard_rules[] = "evdev";
+static char xspice_keyboard_model[] = "pc105";
+static char xspice_keyboard_layout[] = "us";
+static char xspice_keyboard_variant[] = "";
+static char xspice_keyboard_options[] = "";
 static int xspice_keyboard_proc(DeviceIntPtr pDevice, int onoff)
 {
     DevicePtr pDev = (DevicePtr)pDevice;
     XkbRMLVOSet rmlvo = {
-        .rules = "evdev",
-        .model = "pc105",
-        .layout = "us",
-        .variant = "",
-        .options = "",
+        .rules = xspice_keyboard_rules,
+        .model = xspice_keyboard_model,
+        .layout = xspice_keyboard_layout,
+        .variant = xspice_keyboard_variant,
+        .options = xspice_keyboard_options,
     };
 
     switch (onoff) {
@@ -263,6 +270,8 @@ typedef struct XSpicePointer {
     InputInfoPtr     pInfo; /* xf86 device handle to post events */
 } XSpicePointer;
 
+static XSpicePointer *g_xspice_pointer;
+
 static void mouse_motion(SpiceMouseInstance *sin, int dx, int dy, int dz,
                          uint32_t buttons_state)
 {
@@ -297,22 +306,35 @@ static void tablet_set_logical_size(SpiceTabletInstance* sin, int width, int hei
     spice_pointer->height = height;
 }
 
+void spiceqxl_tablet_position(int x, int y, uint32_t buttons_state)
+{
+    // TODO: don't ignore buttons_state
+    xf86PostMotionEvent(g_xspice_pointer->pInfo->dev, 1, 0, 2, x, y);
+}
+
 static void tablet_position(SpiceTabletInstance* sin, int x, int y,
                             uint32_t buttons_state)
 {
-    XSpicePointer *spice_pointer = container_of(sin, XSpicePointer, tablet);
+    spiceqxl_tablet_position(x, y, buttons_state);
+}
 
-    // TODO: don't ignore buttons_state
-    xf86PostMotionEvent(spice_pointer->pInfo->dev, 1, 0, 2, x, y);
+void spiceqxl_tablet_buttons(uint32_t buttons_state)
+{
+    static uint32_t old_buttons_state = 0;
+    int i;
+
+    for (i = 0; i < BUTTONS; i++) {
+        if ((buttons_state ^ old_buttons_state) & (1 << i)) {
+            int action = (buttons_state & (1 << i));
+            xf86PostButtonEvent(g_xspice_pointer->pInfo->dev, 0, i + 1, action, 0, 0);
+        }
+    }
+    old_buttons_state = buttons_state;
 }
 
 static void tablet_buttons(SpiceTabletInstance *sin,
                            uint32_t buttons_state)
 {
-    XSpicePointer *spice_pointer = container_of(sin, XSpicePointer, tablet);
-    static uint32_t old_buttons_state = 0;
-    int i;
-
     // For some reason spice switches the second and third button, undo that.
     // basically undo RED_MOUSE_STATE_TO_LOCAL
     buttons_state = (buttons_state & SPICE_MOUSE_BUTTON_MASK_LEFT) |
@@ -320,14 +342,7 @@ static void tablet_buttons(SpiceTabletInstance *sin,
         ((buttons_state & SPICE_MOUSE_BUTTON_MASK_RIGHT) >> 1) |
         (buttons_state & ~(SPICE_MOUSE_BUTTON_MASK_LEFT | SPICE_MOUSE_BUTTON_MASK_MIDDLE
                           |SPICE_MOUSE_BUTTON_MASK_RIGHT));
-
-    for (i = 0; i < BUTTONS; i++) {
-        if ((buttons_state ^ old_buttons_state) & (1 << i)) {
-            int action = (buttons_state & (1 << i));
-            xf86PostButtonEvent(spice_pointer->pInfo->dev, 0, i + 1, action, 0, 0);
-        }
-    }
-    old_buttons_state = buttons_state;
+    spiceqxl_tablet_buttons(buttons_state);
 }
 
 static void tablet_wheel(SpiceTabletInstance* sin, int wheel,
@@ -350,6 +365,8 @@ static const SpiceTabletInterface tablet_interface = {
     .buttons            = tablet_buttons,
 };
 
+static char unknown_type_string[] = "UNKNOWN";
+
 static int
 XSpiceKeyboardPreInit(InputDriverPtr drv, InputInfoPtr pInfo, int flags)
 {
@@ -360,7 +377,7 @@ XSpiceKeyboardPreInit(InputDriverPtr drv, InputInfoPtr pInfo, int flags)
     kbd->pInfo = pInfo;
 
     pInfo->private = kbd;
-    pInfo->type_name = "UNKNOWN";
+    pInfo->type_name = unknown_type_string;
     pInfo->device_control = xspice_keyboard_proc;
     pInfo->read_input = NULL;
     pInfo->switch_mode = NULL;
@@ -374,14 +391,14 @@ XSpicePointerPreInit(InputDriverPtr drv, InputInfoPtr pInfo, int flags)
 {
     XSpicePointer *spice_pointer;
 
-    spice_pointer = calloc(sizeof(*spice_pointer), 1);
+    g_xspice_pointer = spice_pointer = calloc(sizeof(*spice_pointer), 1);
     spice_pointer->mouse.base.sif  = &mouse_interface.base;
     spice_pointer->tablet.base.sif = &tablet_interface.base;
     spice_pointer->absolute = TRUE;
     spice_pointer->pInfo = pInfo;
 
     pInfo->private = NULL;
-    pInfo->type_name = "UNKNOWN";
+    pInfo->type_name = unknown_type_string;
     pInfo->device_control = xspice_pointer_proc;
     pInfo->read_input = NULL;
     pInfo->switch_mode = NULL;

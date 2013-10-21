@@ -42,8 +42,6 @@
 #include <xf86Crtc.h>
 #include <xf86RandR12.h>
 
-#include "mspace.h"
-
 #include "qxl.h"
 #include "assert.h"
 #include "qxl_option_helpers.h"
@@ -56,28 +54,38 @@
 #include "spiceqxl_inputs.h"
 #include "spiceqxl_io_port.h"
 #include "spiceqxl_spice_server.h"
+#include "spiceqxl_audio.h"
+#include "spiceqxl_vdagent.h"
 #endif /* XSPICE */
+
+#include "dfps.h"
 
 extern void compat_init_scrn (ScrnInfoPtr);
 
-#ifdef WITH_CHECK_POINT
-#define CHECK_POINT() ErrorF ("%s: %d  (%s)\n", __FILE__, __LINE__, __FUNCTION__);
-#else
-#define CHECK_POINT()
-#endif
-
 #define BREAKPOINT()   do { __asm__ __volatile__ ("int $03"); } while (0)
 
+#ifdef XSPICE
+static char filter_str[] = "filter";
+static char auto_str[]   = "auto";
+static char auto_glz_str[]   = "auto_glz";
+static char spice_vdagent_virtio_path_default[] = "/tmp/xspice-virtio";
+static char spice_vdagent_uinput_path_default[] = "/tmp/xspice-uinput";
+#endif
+static char driver_name[] = QXL_DRIVER_NAME;
 const OptionInfoRec DefaultOptions[] =
 {
     { OPTION_ENABLE_IMAGE_CACHE,
-      "EnableImageCache",         OPTV_BOOLEAN, { 0 }, TRUE },
+      "EnableImageCache",         OPTV_BOOLEAN, { 1 }, FALSE },
     { OPTION_ENABLE_FALLBACK_CACHE,
-      "EnableFallbackCache",      OPTV_BOOLEAN, { 0 }, TRUE },
+      "EnableFallbackCache",      OPTV_BOOLEAN, { 1 }, FALSE },
     { OPTION_ENABLE_SURFACES,
-      "EnableSurfaces",           OPTV_BOOLEAN, { 0 }, TRUE },
+      "EnableSurfaces",           OPTV_BOOLEAN, { 1 }, FALSE },
+    { OPTION_DEBUG_RENDER_FALLBACKS,
+      "DebugRenderFallbacks",     OPTV_BOOLEAN, { 0 }, FALSE },
     { OPTION_NUM_HEADS,
       "NumHeads",                 OPTV_INTEGER, { 4 }, FALSE },
+    { OPTION_SPICE_DEFERRED_FPS,
+      "SpiceDeferredFPS",         OPTV_INTEGER, { 0 }, FALSE},
 #ifdef XSPICE
     { OPTION_SPICE_PORT,
       "SpicePort",                OPTV_INTEGER,   {5900}, FALSE },
@@ -99,15 +107,15 @@ const OptionInfoRec DefaultOptions[] =
     { OPTION_SPICE_X509_KEY_FILE,
       "SpiceX509KeyFile",         OPTV_STRING,    {0}, FALSE},
     { OPTION_SPICE_STREAMING_VIDEO,
-      "SpiceStreamingVideo",      OPTV_STRING,    {.str = "filter"}, FALSE},
+      "SpiceStreamingVideo",      OPTV_STRING,    {.str = filter_str}, FALSE},
     { OPTION_SPICE_PLAYBACK_COMPRESSION,
       "SpicePlaybackCompression", OPTV_BOOLEAN,   {1}, FALSE},
     { OPTION_SPICE_ZLIB_GLZ_WAN_COMPRESSION,
-      "SpiceZlibGlzWanCompression", OPTV_STRING,  {.str = "auto"}, FALSE},
+      "SpiceZlibGlzWanCompression", OPTV_STRING,  {.str = auto_str}, FALSE},
     { OPTION_SPICE_JPEG_WAN_COMPRESSION,
-      "SpiceJpegWanCompression",  OPTV_STRING,    {.str = "auto"}, FALSE},
+      "SpiceJpegWanCompression",  OPTV_STRING,    {.str = auto_str}, FALSE},
     { OPTION_SPICE_IMAGE_COMPRESSION,
-      "SpiceImageCompression",    OPTV_STRING,    {.str = "auto_glz"}, FALSE},
+      "SpiceImageCompression",    OPTV_STRING,    {.str = auto_glz_str}, FALSE},
     { OPTION_SPICE_DISABLE_COPY_PASTE,
       "SpiceDisableCopyPaste",    OPTV_BOOLEAN,   {0}, FALSE},
     { OPTION_SPICE_IPV4_ONLY,
@@ -124,6 +132,16 @@ const OptionInfoRec DefaultOptions[] =
       "SpiceCacertFile",          OPTV_STRING,    {0}, FALSE},
     { OPTION_SPICE_DH_FILE,
       "SpiceDhFile",              OPTV_STRING,    {0}, FALSE},
+    { OPTION_SPICE_EXIT_ON_DISCONNECT,
+      "SpiceExitOnDisconnect",    OPTV_BOOLEAN,   {0}, FALSE},
+    { OPTION_SPICE_PLAYBACK_FIFO_DIR,
+      "SpicePlaybackFIFODir",     OPTV_STRING,    {0}, FALSE},
+    { OPTION_SPICE_VDAGENT_ENABLED,
+      "SpiceVdagentEnabled",      OPTV_BOOLEAN,   {0}, FALSE},
+    { OPTION_SPICE_VDAGENT_VIRTIO_PATH,
+      "SpiceVdagentVirtioPath",   OPTV_STRING,    {.str = spice_vdagent_virtio_path_default}, FALSE},
+    { OPTION_SPICE_VDAGENT_UINPUT_PATH,
+      "SpiceVdagentUinputPath",   OPTV_STRING,    {.str = spice_vdagent_uinput_path_default}, FALSE},
 #endif
     
     { -1, NULL, OPTV_NONE, {0}, FALSE }
@@ -135,173 +153,6 @@ qxl_available_options (int chipid, int busid)
     return DefaultOptions;
 }
 
-#ifndef XSPICE
-static void
-qxl_wait_for_io_command (qxl_screen_t *qxl)
-{
-    struct QXLRam *ram_header;
-    
-    ram_header = (void *)((unsigned long)qxl->ram + qxl->rom->ram_header_offset);
-    
-    while (!(ram_header->int_pending & QXL_INTERRUPT_IO_CMD))
-	usleep (1);
-    
-    ram_header->int_pending &= ~QXL_INTERRUPT_IO_CMD;
-}
-
-#if 0
-static void
-qxl_wait_for_display_interrupt (qxl_screen_t *qxl)
-{
-    struct QXLRam *ram_header;
-    
-    ram_header = (void *)((unsigned long)qxl->ram + qxl->rom->ram_header_offset);
-    
-    while (!(ram_header->int_pending & QXL_INTERRUPT_DISPLAY))
-	usleep (1);
-    
-    ram_header->int_pending &= ~QXL_INTERRUPT_DISPLAY;
-}
-
-#endif
-#endif
-
-void
-qxl_update_area (qxl_screen_t *qxl)
-{
-#ifndef XSPICE
-    if (qxl->pci->revision >= 3)
-    {
-	ioport_write (qxl, QXL_IO_UPDATE_AREA_ASYNC, 0);
-	qxl_wait_for_io_command (qxl);
-    }
-    else
-    {
-	ioport_write (qxl, QXL_IO_UPDATE_AREA, 0);
-    }
-#else
-    ioport_write (qxl, QXL_IO_UPDATE_AREA, 0);
-#endif
-}
-
-void
-qxl_io_memslot_add (qxl_screen_t *qxl, uint8_t id)
-{
-#ifndef XSPICE
-    if (qxl->pci->revision >= 3)
-    {
-	ioport_write (qxl, QXL_IO_MEMSLOT_ADD_ASYNC, id);
-	qxl_wait_for_io_command (qxl);
-    }
-    else
-    {
-	ioport_write (qxl, QXL_IO_MEMSLOT_ADD, id);
-    }
-#else
-    ioport_write (qxl, QXL_IO_MEMSLOT_ADD, id);
-#endif
-}
-
-void
-qxl_io_create_primary (qxl_screen_t *qxl)
-{
-#ifndef XSPICE
-    if (qxl->pci->revision >= 3)
-    {
-	ioport_write (qxl, QXL_IO_CREATE_PRIMARY_ASYNC, 0);
-	qxl_wait_for_io_command (qxl);
-    }
-    else
-    {
-	ioport_write (qxl, QXL_IO_CREATE_PRIMARY, 0);
-    }
-#else
-    ioport_write (qxl, QXL_IO_CREATE_PRIMARY, 0);
-#endif
-    qxl->device_primary = QXL_DEVICE_PRIMARY_CREATED;
-}
-
-void
-qxl_io_destroy_primary (qxl_screen_t *qxl)
-{
-#ifndef XSPICE
-    if (qxl->pci->revision >= 3)
-    {
-	ioport_write (qxl, QXL_IO_DESTROY_PRIMARY_ASYNC, 0);
-	qxl_wait_for_io_command (qxl);
-    }
-    else
-    {
-	ioport_write (qxl, QXL_IO_DESTROY_PRIMARY, 0);
-    }
-#else
-    ioport_write (qxl, QXL_IO_DESTROY_PRIMARY, 0);
-#endif
-    qxl->device_primary = QXL_DEVICE_PRIMARY_NONE;
-}
-
-void
-qxl_io_notify_oom (qxl_screen_t *qxl)
-{
-    ioport_write (qxl, QXL_IO_NOTIFY_OOM, 0);
-}
-
-void
-qxl_io_flush_surfaces (qxl_screen_t *qxl)
-{
-    // FIXME: write individual update_area for revision < V10
-#ifndef XSPICE
-    ioport_write (qxl, QXL_IO_FLUSH_SURFACES_ASYNC, 0);
-    qxl_wait_for_io_command (qxl);
-#else
-    ioport_write (qxl, QXL_IO_FLUSH_SURFACES_ASYNC, 0);
-#endif
-}
-
-static void
-qxl_usleep (int useconds)
-{
-    struct timespec t;
-    
-    t.tv_sec = useconds / 1000000;
-    t.tv_nsec = (useconds - (t.tv_sec * 1000000)) * 1000;
-    
-    errno = 0;
-    while (nanosleep (&t, &t) == -1 && errno == EINTR)
-	;
-}
-
-#ifdef QXLDRV_RESIZABLE_SURFACE0
-static void
-qxl_io_flush_release (qxl_screen_t *qxl)
-{
-#ifndef XSPICE
-    int sum = 0;
-    
-    sum += qxl_garbage_collect (qxl);
-    ioport_write (qxl, QXL_IO_FLUSH_RELEASE, 0);
-    sum +=  qxl_garbage_collect (qxl);
-    ErrorF ("%s: collected %d\n", __func__, sum);
-#else
-#endif
-}
-
-#endif
-
-static void
-qxl_io_monitors_config_async (qxl_screen_t *qxl)
-{
-#ifndef XSPICE
-    if (qxl->pci->revision < 4)
-	return;
-    
-    ioport_write (qxl, QXL_IO_MONITORS_CONFIG_ASYNC, 0);
-    qxl_wait_for_io_command (qxl);
-#else
-    fprintf (stderr, "UNIMPLEMENTED!\n");
-#endif
-}
-
 /* Having a single monitors config struct allocated on the device avoids any
  *
  * possible fragmentation. Since X is single threaded there is no danger
@@ -310,183 +161,11 @@ qxl_io_monitors_config_async (qxl_screen_t *qxl)
  */
 #define MAX_MONITORS_NUM 16
 
-static void
+void
 qxl_allocate_monitors_config (qxl_screen_t *qxl)
 {
-    int size = sizeof (QXLMonitorsConfig) + sizeof (QXLHead) * MAX_MONITORS_NUM;
-    
-    if (qxl->monitors_config)
-	return;
-    
     qxl->monitors_config = (QXLMonitorsConfig *)(void *)
 	((unsigned long)qxl->ram + qxl->rom->ram_header_offset - qxl->monitors_config_size);
-    
-    memset (qxl->monitors_config, 0, size);
-}
-
-static uint64_t
-qxl_garbage_collect_internal (qxl_screen_t *qxl, uint64_t id)
-{
-    /* We assume that there the two low bits of a pointer are
-     * available. If the low one is set, then the command in
-     * question is a cursor command
-     */
-#define POINTER_MASK ((1 << 2) - 1)
-	    
-    union QXLReleaseInfo *info = u64_to_pointer (id & ~POINTER_MASK);
-    struct QXLCursorCmd *cmd = (struct QXLCursorCmd *)info;
-    struct QXLDrawable *drawable = (struct QXLDrawable *)info;
-    struct QXLSurfaceCmd *surface_cmd = (struct QXLSurfaceCmd *)info;
-    int is_cursor = FALSE;
-    int is_surface = FALSE;
-    int is_drawable = FALSE;
-    
-    if ((id & POINTER_MASK) == 1)
-	is_cursor = TRUE;
-    else if ((id & POINTER_MASK) == 2)
-	is_surface = TRUE;
-    else
-	is_drawable = TRUE;
-    
-    if (is_cursor && cmd->type == QXL_CURSOR_SET)
-    {
-	struct QXLCursor *cursor = (void *)virtual_address (
-	    qxl, u64_to_pointer (cmd->u.set.shape), qxl->main_mem_slot);
-	
-	qxl_free (qxl->mem, cursor, "cursor image");
-    }
-    else if (is_drawable && drawable->type == QXL_DRAW_COPY)
-    {
-	struct QXLImage *image = virtual_address (
-	    qxl, u64_to_pointer (drawable->u.copy.src_bitmap), qxl->main_mem_slot);
-	
-	if (image->descriptor.type == SPICE_IMAGE_TYPE_SURFACE)
-	{
-	    qxl_surface_unref (qxl->surface_cache, image->surface_image.surface_id);
-	    qxl_surface_cache_sanity_check (qxl->surface_cache);
-	    qxl_free (qxl->mem, image, "surface image");
-	}
-	else
-	{
-	    qxl_image_destroy (qxl, image);
-	}
-    }
-    else if (is_drawable && drawable->type == QXL_DRAW_COMPOSITE)
-    {
-	struct QXLTransform *src_trans, *mask_trans;
-	struct QXLImage *src_img, *mask_img;
-	struct QXLComposite *composite = &drawable->u.composite;
-	
-	/* Source */
-	src_img = virtual_address (
-	    qxl, u64_to_pointer (drawable->u.composite.src), qxl->main_mem_slot);
-	qxl_free (qxl->mem, src_img, "image struct");
-	
-	if (composite->src_transform)
-	{
-	    src_trans = virtual_address (
-		qxl, u64_to_pointer (composite->src_transform), qxl->main_mem_slot);
-	    qxl_free (qxl->mem, src_trans, "transform");
-	}
-	
-	/* Mask */
-	if (drawable->u.composite.mask)
-	{
-	    if (drawable->u.composite.mask_transform)
-	    {
-		mask_trans = virtual_address (
-		    qxl, u64_to_pointer (drawable->u.composite.mask_transform), qxl->main_mem_slot);
-		
-		qxl_free (qxl->mem, mask_trans, "transform");
-	    }
-	    
-	    mask_img = virtual_address (
-		qxl, u64_to_pointer (drawable->u.composite.mask), qxl->main_mem_slot);
-	    qxl_free (qxl->mem, mask_img, "image struct");
-	}
-    }
-    else if (is_surface && surface_cmd->type == QXL_SURFACE_CMD_DESTROY)
-    {
-	qxl_surface_recycle (qxl->surface_cache, surface_cmd->surface_id);
-	qxl_surface_cache_sanity_check (qxl->surface_cache);
-    }
-    
-    id = info->next;
-    
-    qxl_free (qxl->mem, info, "command");
-    
-    return id;
-}
-
-int
-qxl_garbage_collect (qxl_screen_t *qxl)
-{
-    uint64_t id;
-    int      i = 0;
-    
-    while (qxl_ring_pop (qxl->release_ring, &id))
-    {
-	while (id)
-	{
-	    id = qxl_garbage_collect_internal (qxl, id);
-	    
-	    i++;
-	}
-    }
-    
-    return i;
-}
-
-int
-qxl_handle_oom (qxl_screen_t *qxl)
-{
-    qxl_io_notify_oom (qxl);
-    
-#if 0
-    ErrorF (".");
-    qxl_usleep (10000);
-#endif
-    
-    if (!(qxl_garbage_collect (qxl)))
-	qxl_usleep (10000);
-    
-    return qxl_garbage_collect (qxl);
-}
-
-void *
-qxl_allocnf (qxl_screen_t *qxl, unsigned long size, const char *name)
-{
-    void *result;
-    int n_attempts = 0;
-    
-#if 0
-    static int nth_oom = 1;
-#endif
-    
-    qxl_garbage_collect (qxl);
-    
-    while (!(result = qxl_alloc (qxl->mem, size, name)))
-    {
-#if 0
-	ErrorF ("eliminated memory (%d)\n", nth_oom++);
-#endif
-	if (!qxl_garbage_collect (qxl))
-	{
-	    if (qxl_handle_oom (qxl))
-	    {
-		n_attempts = 0;
-	    }
-	    else if (++n_attempts == 1000)
-	    {
-		ErrorF ("Out of memory allocating %ld bytes\n", size);
-		qxl_mem_dump_stats (qxl->mem, "Out of mem - stats\n");
-		fprintf (stderr, "Out of memory\n");
-		exit (1);
-	    }
-	}
-    }
-    
-    return result;
 }
 
 static Bool
@@ -507,13 +186,13 @@ unmap_memory_helper (qxl_screen_t *qxl)
 static void
 map_memory_helper (qxl_screen_t *qxl)
 {
-    qxl->ram = malloc (RAM_SIZE);
+    qxl->ram = calloc (RAM_SIZE, 1);
     qxl->ram_size = RAM_SIZE;
     qxl->ram_physical = qxl->ram;
-    qxl->vram = malloc (VRAM_SIZE);
+    qxl->vram = calloc (VRAM_SIZE, 1);
     qxl->vram_size = VRAM_SIZE;
     qxl->vram_physical = qxl->vram;
-    qxl->rom = malloc (ROM_SIZE);
+    qxl->rom = calloc (ROM_SIZE, 1);
     
     init_qxl_rom (qxl, ROM_SIZE);
 }
@@ -591,7 +270,7 @@ qxl_unmap_memory (qxl_screen_t *qxl)
 #ifdef XSPICE
     if (qxl->worker)
     {
-	qxl->worker->stop (qxl->worker);
+        spice_server_vm_stop(qxl->spice_server);
 	qxl->worker_running = FALSE;
     }
 #endif
@@ -600,32 +279,21 @@ qxl_unmap_memory (qxl_screen_t *qxl)
     {
 	qxl_mem_free_all (qxl->mem);
 	qxl_drop_image_cache (qxl);
+	free(qxl->mem);
+	qxl->mem = NULL;
     }
     
-    if (qxl->surf_mem)
+    if (qxl->surf_mem) {
 	qxl_mem_free_all (qxl->surf_mem);
+	free(qxl->surf_mem);
+	qxl->surf_mem = NULL;
+    }
     
     unmap_memory_helper (qxl);
     qxl->ram = qxl->ram_physical = qxl->vram = qxl->rom = NULL;
     
     qxl->num_modes = 0;
     qxl->modes = NULL;
-}
-
-static void __attribute__ ((__noreturn__))
-qxl_mspace_abort_func (void *user_data)
-{
-    abort ();
-}
-
-static void __attribute__ ((format (gnu_printf, 2, 3)))
-qxl_mspace_print_func (void *user_data, const char *format, ...)
-{
-    va_list args;
-    
-    va_start (args, format);
-    VErrorF (format, args);
-    va_end (args);
 }
 
 #ifdef QXLDRV_RESIZABLE_SURFACE0
@@ -771,103 +439,6 @@ qxl_restore_state (ScrnInfoPtr pScrn)
 
 #endif /* XSPICE */
 
-static uint8_t
-setup_slot (qxl_screen_t *qxl, uint8_t slot_index_offset,
-            unsigned long start_phys_addr, unsigned long end_phys_addr,
-            uint64_t start_virt_addr, uint64_t end_virt_addr)
-{
-    uint64_t       high_bits;
-    qxl_memslot_t *slot;
-    uint8_t        slot_index;
-    struct QXLRam *ram_header;
-    
-    ram_header = (void *)((unsigned long)qxl->ram + (unsigned long)qxl->rom->ram_header_offset);
-    
-    slot_index = qxl->rom->slots_start + slot_index_offset;
-    slot = &qxl->mem_slots[slot_index];
-    slot->start_phys_addr = start_phys_addr;
-    slot->end_phys_addr = end_phys_addr;
-    slot->start_virt_addr = start_virt_addr;
-    slot->end_virt_addr = end_virt_addr;
-    
-    ram_header->mem_slot.mem_start = slot->start_phys_addr;
-    ram_header->mem_slot.mem_end = slot->end_phys_addr;
-    
-    qxl_io_memslot_add (qxl, slot_index);
-    
-    slot->generation = qxl->rom->slot_generation;
-    
-    high_bits = slot_index << qxl->slot_gen_bits;
-    high_bits |= slot->generation;
-    high_bits <<= (64 - (qxl->slot_gen_bits + qxl->slot_id_bits));
-    slot->high_bits = high_bits;
-    
-    return slot_index;
-}
-
-static void
-qxl_reset_and_create_mem_slots (qxl_screen_t *qxl)
-{
-    ioport_write (qxl, QXL_IO_RESET, 0);
-    qxl->device_primary = QXL_DEVICE_PRIMARY_NONE;
-    /* Mem slots */
-    ErrorF ("slots start: %d, slots end: %d\n",
-            qxl->rom->slots_start,
-            qxl->rom->slots_end);
-    
-    /* Main slot */
-    qxl->n_mem_slots = qxl->rom->slots_end;
-    qxl->slot_gen_bits = qxl->rom->slot_gen_bits;
-    qxl->slot_id_bits = qxl->rom->slot_id_bits;
-    qxl->va_slot_mask = (~(uint64_t)0) >> (qxl->slot_id_bits + qxl->slot_gen_bits);
-    
-    qxl->mem_slots = xnfalloc (qxl->n_mem_slots * sizeof (qxl_memslot_t));
-    
-#ifdef XSPICE
-    qxl->main_mem_slot = qxl->vram_mem_slot = setup_slot (qxl, 0, 0, ~0, 0, ~0);
-#else /* QXL */
-    qxl->main_mem_slot = setup_slot (qxl, 0,
-                                     (unsigned long)qxl->ram_physical,
-                                     (unsigned long)qxl->ram_physical + qxl->surface0_size +
-                                     (unsigned long)qxl->rom->num_pages * getpagesize (),
-                                     (uint64_t)(uintptr_t)qxl->ram,
-                                     (uint64_t)(uintptr_t)qxl->ram + qxl->surface0_size +
-                                     (unsigned long)qxl->rom->num_pages * getpagesize ()
-	);
-    qxl->vram_mem_slot = setup_slot (qxl, 1,
-                                     (unsigned long)qxl->vram_physical,
-                                     (unsigned long)qxl->vram_physical + (unsigned long)qxl->vram_size,
-                                     (uint64_t)(uintptr_t)qxl->vram,
-                                     (uint64_t)(uintptr_t)qxl->vram + (uint64_t)qxl->vram_size);
-#endif
-}
-
-static void
-qxl_mark_mem_unverifiable (qxl_screen_t *qxl)
-{
-    qxl_mem_unverifiable (qxl->mem);
-    qxl_mem_unverifiable (qxl->surf_mem);
-}
-
-void
-qxl_io_destroy_all_surfaces (qxl_screen_t *qxl)
-{
-#ifndef XSPICE
-    if (qxl->pci->revision >= 3)
-    {
-	ioport_write (qxl, QXL_IO_DESTROY_ALL_SURFACES_ASYNC, 0);
-	qxl_wait_for_io_command (qxl);
-    }
-    else
-    {
-	ioport_write (qxl, QXL_IO_DESTROY_ALL_SURFACES, 0);
-    }
-#else
-    ErrorF ("Xspice: error: UNIMPLEMENTED qxl_io_destroy_all_surfaces\n");
-#endif
-    qxl->device_primary = QXL_DEVICE_PRIMARY_NONE;
-}
-
 static Bool
 qxl_close_screen (CLOSE_SCREEN_ARGS_DECL)
 {
@@ -881,9 +452,6 @@ qxl_close_screen (CLOSE_SCREEN_ARGS_DECL)
 #else
     pScrn->EnableDisableFBAccess (pScrn, FALSE);
 #endif
-    ErrorF ("Freeing %p\n", qxl->fb);
-    free (qxl->fb);
-    qxl->fb = NULL;
     
     pScreen->CreateScreenResources = qxl->create_screen_resources;
     pScreen->CloseScreen = qxl->close_screen;
@@ -906,8 +474,8 @@ qxl_close_screen (CLOSE_SCREEN_ARGS_DECL)
     return result;
 }
 
-static void
-set_screen_pixmap_header (ScreenPtr pScreen)
+void
+qxl_set_screen_pixmap_header (ScreenPtr pScreen)
 {
     ScrnInfoPtr pScrn = xf86ScreenToScrn (pScreen);
     qxl_screen_t *qxl = pScrn->driverPrivate;
@@ -917,15 +485,11 @@ set_screen_pixmap_header (ScreenPtr pScreen)
     
     if (pPixmap)
     {
-	ErrorF ("new stride: %d (display width: %d, bpp: %d)\n",
-	        qxl->pScrn->displayWidth * qxl->bytes_per_pixel,
-	        qxl->pScrn->displayWidth, qxl->bytes_per_pixel);
-	
 	pScreen->ModifyPixmapHeader (pPixmap,
 	                             qxl->primary_mode.x_res, qxl->primary_mode.y_res,
 	                             -1, -1,
-	                             qxl->pScrn->displayWidth * qxl->bytes_per_pixel,
-	                             NULL);
+	                             qxl->primary_mode.x_res * qxl->bytes_per_pixel,
+	                             qxl_surface_get_host_bits(qxl->primary));
     }
     else
     {
@@ -933,12 +497,28 @@ set_screen_pixmap_header (ScreenPtr pScreen)
     }
 }
 
-static Bool
+static qxl_surface_t *
+qxl_create_primary(qxl_screen_t *qxl)
+{
+    struct QXLMode *pm = &qxl->primary_mode;
+    pm->id = 0x4242;
+    pm->x_res = qxl->virtual_x;
+    pm->y_res = qxl->virtual_y;
+    pm->bits = qxl->pScrn->bitsPerPixel;
+    pm->stride = qxl->virtual_x * pm->bits / 8;
+    pm->x_mili = 0; // TODO
+    pm->y_mili = 0; // TODO
+    pm->orientation = 0; // ? supported by us for single head usage? more TODO
+
+    return qxl_surface_cache_create_primary (qxl, &qxl->primary_mode);
+}
+
+Bool
 qxl_resize_primary_to_virtual (qxl_screen_t *qxl)
 {
     ScreenPtr pScreen;
     long new_surface0_size;
-    
+
     if ((qxl->primary_mode.x_res == qxl->virtual_x &&
          qxl->primary_mode.y_res == qxl->virtual_y) &&
         qxl->device_primary == QXL_DEVICE_PRIMARY_CREATED)
@@ -947,16 +527,18 @@ qxl_resize_primary_to_virtual (qxl_screen_t *qxl)
     }
     
     ErrorF ("resizing primary to %dx%d\n", qxl->virtual_x, qxl->virtual_y);
+
+    if (!qxl->kms_enabled) {
+	new_surface0_size =
+	    qxl->virtual_x * qxl->pScrn->bitsPerPixel / 8 * qxl->virtual_y;
     
-    new_surface0_size =
-        qxl->virtual_x * qxl->pScrn->bitsPerPixel / 8 * qxl->virtual_y;
-    
-    if (new_surface0_size > qxl->surface0_size)
-    {
-	if (!qxl_resize_surface0 (qxl, new_surface0_size))
+	if (new_surface0_size > qxl->surface0_size)
 	{
-	    ErrorF ("not resizing primary to virtual, leaving old virtual\n");
-	    return FALSE;
+	    if (!qxl_resize_surface0 (qxl, new_surface0_size))
+	    {
+		ErrorF ("not resizing primary to virtual, leaving old virtual\n");
+		return FALSE;
+	    }
 	}
     }
     
@@ -964,40 +546,35 @@ qxl_resize_primary_to_virtual (qxl_screen_t *qxl)
     {
 	qxl_surface_kill (qxl->primary);
 	qxl_surface_cache_sanity_check (qxl->surface_cache);
-	qxl_io_destroy_primary (qxl);
+	qxl->bo_funcs->destroy_primary(qxl, qxl->primary_bo);
     }
     
-    {
-	struct QXLMode *pm = &qxl->primary_mode;
-	pm->id = 0x4242;
-	pm->x_res = qxl->virtual_x;
-	pm->y_res = qxl->virtual_y;
-	pm->bits = qxl->pScrn->bitsPerPixel;
-	pm->stride = qxl->virtual_x * pm->bits / 8;
-	pm->x_mili = 0; // TODO
-	pm->y_mili = 0; // TODO
-	pm->orientation = 0; // ? supported by us for single head usage? more TODO
-    }
-    qxl->primary = qxl_surface_cache_create_primary (qxl->surface_cache, &qxl->primary_mode);
+    qxl->primary = qxl_create_primary(qxl);
     qxl->bytes_per_pixel = (qxl->pScrn->bitsPerPixel + 7) / 8;
     
     pScreen = qxl->pScrn->pScreen;
     if (pScreen)
     {
 	PixmapPtr root = pScreen->GetScreenPixmap (pScreen);
-	qxl_surface_t *surf;
-	
-	if ((surf = get_surface (root)))
-	    qxl_surface_kill (surf);
-	
-	set_surface (root, qxl->primary);
+
+        if (qxl->deferred_fps <= 0)
+        {
+            qxl_surface_t *surf;
+
+            if ((surf = get_surface (root)))
+                qxl_surface_kill (surf);
+            
+            set_surface (root, qxl->primary);
+        }
+
+        qxl_set_screen_pixmap_header (pScreen);
     }
     
     ErrorF ("primary is %p\n", qxl->primary);
     return TRUE;
 }
 
-static Bool
+Bool
 qxl_resize_primary (qxl_screen_t *qxl, uint32_t width, uint32_t height)
 {
     qxl->virtual_x = width;
@@ -1023,167 +600,6 @@ qxl_switch_mode (SWITCH_MODE_ARGS_DECL)
     return qxl_resize_primary_to_virtual (qxl);
 }
 
-enum ROPDescriptor
-{
-    ROPD_INVERS_SRC = (1 << 0),
-    ROPD_INVERS_BRUSH = (1 << 1),
-    ROPD_INVERS_DEST = (1 << 2),
-    ROPD_OP_PUT = (1 << 3),
-    ROPD_OP_OR = (1 << 4),
-    ROPD_OP_AND = (1 << 5),
-    ROPD_OP_XOR = (1 << 6),
-    ROPD_OP_BLACKNESS = (1 << 7),
-    ROPD_OP_WHITENESS = (1 << 8),
-    ROPD_OP_INVERS = (1 << 9),
-    ROPD_INVERS_RES = (1 << 10),
-};
-
-static int
-check_crtc (qxl_screen_t *qxl)
-{
-    int i, count = 0;
-    xf86CrtcPtr crtc;
-    
-    for (i = 0 ; i < qxl->num_heads; ++i)
-    {
-	crtc = qxl->crtcs[i];
-
-	if (!crtc->enabled || crtc->mode.CrtcHDisplay == 0 ||
-	    crtc->mode.CrtcVDisplay == 0)
-	{
-	    continue;
-	}
-	count++;
-    }
-    
-#if 0
-    if (count == 0)
-    {
-	ErrorF ("check crtc failed, count == 0!!\n");
-	BREAKPOINT ();
-    }
-#endif
-    
-    return count;
-}
-
-static void
-qxl_update_monitors_config (qxl_screen_t *qxl)
-{
-    int i;
-    QXLHead *head;
-    xf86CrtcPtr crtc;
-    qxl_output_private *qxl_output;
-    QXLRam * ram = get_ram_header (qxl);
-    
-    check_crtc (qxl);
-    
-    qxl->monitors_config->count = 0;
-    qxl->monitors_config->max_allowed = qxl->num_heads;
-    for (i = 0 ; i < qxl->num_heads; ++i)
-    {
-	head = &qxl->monitors_config->heads[qxl->monitors_config->count];
-	crtc = qxl->crtcs[i];
-	qxl_output = qxl->outputs[i]->driver_private;
-	head->id = i;
-	head->surface_id = 0;
-	head->flags = 0;
-
-	if (!crtc->enabled || crtc->mode.CrtcHDisplay == 0 ||
-	    crtc->mode.CrtcVDisplay == 0)
-	{
-	    head->width = head->height = head->x = head->y = 0;
-	    qxl_output->status = XF86OutputStatusDisconnected;
-	}
-	else
-	{
-	    head->width = crtc->mode.CrtcHDisplay;
-	    head->height = crtc->mode.CrtcVDisplay;
-	    head->x = crtc->x;
-	    head->y = crtc->y;
-	    qxl->monitors_config->count++;
-	    qxl_output->status = XF86OutputStatusConnected;
-	}
-    }
-    /* initialize when actually used, memslots should be initialized by now */
-    if (ram->monitors_config == 0)
-    {
-	ram->monitors_config = physical_address (qxl, qxl->monitors_config,
-	                                         qxl->main_mem_slot);
-    }
-    
-    qxl_io_monitors_config_async (qxl);
-}
-
-static Bool
-crtc_set_mode_major (xf86CrtcPtr crtc, DisplayModePtr mode,
-                     Rotation rotation, int x, int y)
-{
-    qxl_crtc_private *crtc_private = crtc->driver_private;
-    qxl_screen_t *    qxl = crtc_private->qxl;
-    
-    if (crtc == qxl->crtcs[0] && mode == NULL)
-    {
-	/* disallow disabling of monitor 0 mode */
-	ErrorF ("%s: not allowing crtc 0 disablement\n", __func__);
-	return FALSE;
-    }
-    
-    crtc->mode = *mode;
-    crtc->x = x;
-    crtc->y = y;
-    crtc->rotation = rotation;
-#if XORG_VERSION_CURRENT >= XORG_VERSION_NUMERIC (1, 5, 99, 0, 0)
-    crtc->transformPresent = FALSE;
-#endif
-    qxl_output_edid_set (crtc_private->output, crtc_private->head, mode);
-    
-    return TRUE;
-}
-
-static Bool
-qxl_create_desired_modes (qxl_screen_t *qxl)
-{
-    int i;
-    xf86CrtcConfigPtr config = XF86_CRTC_CONFIG_PTR (qxl->pScrn);
-    
-    CHECK_POINT ();
-    
-    for (i = 0 ; i < config->num_crtc; ++i)
-    {
-	xf86CrtcPtr crtc = config->crtc[i];
-	if (!crtc->enabled)
-	    continue;
-	
-	if (!crtc_set_mode_major (
-		crtc, &crtc->desiredMode, crtc->desiredRotation,
-		crtc->desiredX, crtc->desiredY))
-	{
-	    return FALSE;
-	}
-    }
-    
-    qxl_update_monitors_config (qxl);
-    return TRUE;
-}
-
-static void
-qxl_update_edid (qxl_screen_t *qxl)
-{
-    xf86CrtcConfigPtr config = XF86_CRTC_CONFIG_PTR (qxl->pScrn); 
-    int i;
-   
-    for (i = 0; i < config->num_crtc; ++i)
-    {
-	xf86CrtcPtr crtc = config->crtc[i];
-
-	if (!crtc->enabled)
-	    continue;
-	
-	qxl_output_edid_set (qxl->outputs[i], i, &crtc->desiredMode);
-    }
-}
-
 static Bool
 qxl_create_screen_resources (ScreenPtr pScreen)
 {
@@ -1192,7 +608,6 @@ qxl_create_screen_resources (ScreenPtr pScreen)
     Bool           ret;
     PixmapPtr      pPixmap;
     qxl_surface_t *surf;
-    int            i;
     
     pScreen->CreateScreenResources = qxl->create_screen_resources;
     ret = pScreen->CreateScreenResources (pScreen);
@@ -1202,491 +617,19 @@ qxl_create_screen_resources (ScreenPtr pScreen)
 	return FALSE;
     
     pPixmap = pScreen->GetScreenPixmap (pScreen);
-    
-    set_screen_pixmap_header (pScreen);
-    
-    if ((surf = get_surface (pPixmap)))
-	qxl_surface_kill (surf);
-    
-    set_surface (pPixmap, qxl->primary);
-    
-    /* HACK - I don't want to enable any crtcs other then the first at the beginning */
-    for (i = 1; i < qxl->num_heads; ++i)
-    {
-	qxl_output_private *private;
 
-	qxl->crtcs[i]->enabled = 0;
-	private = qxl->outputs[i]->driver_private;
-	private->status = XF86OutputStatusDisconnected;
+    if (qxl->deferred_fps <= 0)
+    {
+        qxl_set_screen_pixmap_header (pScreen);
+
+        if ((surf = get_surface (pPixmap)))
+            qxl_surface_kill (surf);
+
+        set_surface (pPixmap, qxl->primary);
     }
-    
+
     qxl_create_desired_modes (qxl);
     qxl_update_edid (qxl);
-    
-    return TRUE;
-}
-
-#if HAS_DEVPRIVATEKEYREC
-DevPrivateKeyRec uxa_pixmap_index;
-#else
-int uxa_pixmap_index;
-#endif
-
-static Bool
-qxl_prepare_access (PixmapPtr pixmap, RegionPtr region, uxa_access_t access)
-{
-    return qxl_surface_prepare_access (get_surface (pixmap),
-                                       pixmap, region, access);
-}
-
-static void
-qxl_finish_access (PixmapPtr pixmap)
-{
-    qxl_surface_finish_access (get_surface (pixmap), pixmap);
-}
-
-static Bool
-qxl_pixmap_is_offscreen (PixmapPtr pixmap)
-{
-    return !!get_surface (pixmap);
-}
-
-static Bool
-good_alu_and_pm (DrawablePtr drawable, int alu, Pixel planemask)
-{
-    if (!UXA_PM_IS_SOLID (drawable, planemask))
-	return FALSE;
-    
-    if (alu != GXcopy)
-	return FALSE;
-    
-    return TRUE;
-}
-
-/*
- * Solid fill
- */
-static Bool
-qxl_check_solid (DrawablePtr drawable, int alu, Pixel planemask)
-{
-    if (!good_alu_and_pm (drawable, alu, planemask))
-	return FALSE;
-    
-    return TRUE;
-}
-
-static Bool
-qxl_prepare_solid (PixmapPtr pixmap, int alu, Pixel planemask, Pixel fg)
-{
-    qxl_surface_t *surface;
-    
-    if (!(surface = get_surface (pixmap)))
-	return FALSE;
-    
-    return qxl_surface_prepare_solid (surface, fg);
-}
-
-static void
-qxl_solid (PixmapPtr pixmap, int x1, int y1, int x2, int y2)
-{
-    qxl_surface_solid (get_surface (pixmap), x1, y1, x2, y2);
-}
-
-static void
-qxl_done_solid (PixmapPtr pixmap)
-{
-}
-
-/*
- * Copy
- */
-static Bool
-qxl_check_copy (PixmapPtr source, PixmapPtr dest,
-                int alu, Pixel planemask)
-{
-    if (!good_alu_and_pm ((DrawablePtr)source, alu, planemask))
-	return FALSE;
-    
-    if (source->drawable.bitsPerPixel != dest->drawable.bitsPerPixel)
-    {
-	ErrorF ("differing bitsperpixel - this shouldn't happen\n");
-	return FALSE;
-    }
-    
-    return TRUE;
-}
-
-static Bool
-qxl_prepare_copy (PixmapPtr source, PixmapPtr dest,
-                  int xdir, int ydir, int alu,
-                  Pixel planemask)
-{
-    return qxl_surface_prepare_copy (get_surface (dest), get_surface (source));
-}
-
-static void
-qxl_copy (PixmapPtr dest,
-          int src_x1, int src_y1,
-          int dest_x1, int dest_y1,
-          int width, int height)
-{
-    qxl_surface_copy (get_surface (dest),
-                      src_x1, src_y1,
-                      dest_x1, dest_y1,
-                      width, height);
-}
-
-static void
-qxl_done_copy (PixmapPtr dest)
-{
-}
-
-/*
- * Composite
- */
-static Bool
-can_accelerate_picture (PicturePtr pict)
-{
-    if (!pict)
-	return TRUE;
-
-    if (pict->format != PICT_a8r8g8b8		&&
-	pict->format != PICT_x8r8g8b8		&&
-	pict->format != PICT_a8)
-    {
-	return FALSE;
-    }
-
-    if (!pict->pDrawable)
-	return FALSE;
-
-    if (pict->transform)
-    {
-	if (pict->transform->matrix[2][0] != 0	||
-	    pict->transform->matrix[2][1] != 0	||
-	    pict->transform->matrix[2][2] != pixman_int_to_fixed (1))
-	{
-	    return FALSE;
-	}
-    }
-
-    if (pict->filter != PictFilterBilinear	&&
-	pict->filter != PictFilterNearest)
-    {
-	return FALSE;
-    }
-    
-    return TRUE;
-}
-
-#define QXL_HAS_CAP(qxl, cap)						\
-    (((qxl)->rom->client_capabilities[(cap) / 8]) & (1 << ((cap) % 8)))
-
-static Bool
-qxl_has_composite (qxl_screen_t *qxl)
-{
-#ifndef XSPICE
-    return
-	qxl->pci->revision >= 4			&&
-	QXL_HAS_CAP (qxl, SPICE_DISPLAY_CAP_COMPOSITE);
-#else
-    /* FIXME */
-    return FALSE;
-#endif
-}
-
-static Bool
-qxl_has_a8_surfaces (qxl_screen_t *qxl)
-{
-#ifndef XSPICE
-    return
-	qxl->pci->revision >= 4			&&
-	QXL_HAS_CAP (qxl, SPICE_DISPLAY_CAP_A8_SURFACE);
-#else
-    /* FIXME */
-    return FALSE;
-#endif
-}
-
-static Bool
-qxl_check_composite (int op,
-		     PicturePtr pSrcPicture,
-		     PicturePtr pMaskPicture,
-		     PicturePtr pDstPicture,
-		     int width, int height)
-{
-    int i;
-    ScreenPtr pScreen = pDstPicture->pDrawable->pScreen;
-    ScrnInfoPtr pScrn = xf86ScreenToScrn (pScreen);
-    qxl_screen_t *qxl = pScrn->driverPrivate;
-    
-    static const int accelerated_ops[] =
-    {
-	PictOpClear, PictOpSrc, PictOpDst, PictOpOver, PictOpOverReverse,
-	PictOpIn, PictOpInReverse, PictOpOut, PictOpOutReverse,
-	PictOpAtop, PictOpAtopReverse, PictOpXor, PictOpAdd,
-	PictOpSaturate, PictOpMultiply, PictOpScreen, PictOpOverlay,
-	PictOpDarken, PictOpLighten, PictOpColorDodge, PictOpColorBurn,
-	PictOpHardLight, PictOpSoftLight, PictOpDifference, PictOpExclusion,
-	PictOpHSLHue, PictOpHSLSaturation, PictOpHSLColor, PictOpHSLLuminosity,
-    };
-
-    if (!qxl_has_composite (qxl))
-	return FALSE;
-    
-    if (!can_accelerate_picture (pSrcPicture)	||
-	!can_accelerate_picture (pMaskPicture)	||
-	!can_accelerate_picture (pDstPicture))
-    {
-	return FALSE;
-    }
-
-    for (i = 0; i < sizeof (accelerated_ops) / sizeof (accelerated_ops[0]); ++i)
-    {
-	if (accelerated_ops[i] == op)
-	    goto found;
-    }
-    return FALSE;
-
-found:
-    return TRUE;
-}
-
-static Bool
-qxl_check_composite_target (PixmapPtr pixmap)
-{
-    return TRUE;
-}
-
-static Bool
-qxl_check_composite_texture (ScreenPtr screen,
-			     PicturePtr pPicture)
-{
-    return TRUE;
-}
-
-static Bool
-qxl_prepare_composite (int op,
-		       PicturePtr pSrcPicture,
-		       PicturePtr pMaskPicture,
-		       PicturePtr pDstPicture,
-		       PixmapPtr pSrc,
-		       PixmapPtr pMask,
-		       PixmapPtr pDst)
-{
-    return qxl_surface_prepare_composite (
-	op, pSrcPicture, pMaskPicture, pDstPicture,
-	get_surface (pSrc),
-	pMask? get_surface (pMask) : NULL,
-	get_surface (pDst));
-}
-
-static void
-qxl_composite (PixmapPtr pDst,
-	       int src_x, int src_y,
-	       int mask_x, int mask_y,
-	       int dst_x, int dst_y,
-	       int width, int height)
-{
-    qxl_surface_composite (
-	get_surface (pDst),
-	src_x, src_y,
-	mask_x, mask_y,
-	dst_x, dst_y, width, height);
-}
-
-static void
-qxl_done_composite (PixmapPtr pDst)
-{
-    ;
-}
-
-static Bool
-qxl_put_image (PixmapPtr pDst, int x, int y, int w, int h,
-               char *src, int src_pitch)
-{
-    qxl_surface_t *surface = get_surface (pDst);
-    
-    if (surface)
-	return qxl_surface_put_image (surface, x, y, w, h, src, src_pitch);
-    
-    return FALSE;
-}
-
-static void
-qxl_set_screen_pixmap (PixmapPtr pixmap)
-{
-    pixmap->drawable.pScreen->devPrivate = pixmap;
-}
-
-static PixmapPtr
-qxl_create_pixmap (ScreenPtr screen, int w, int h, int depth, unsigned usage)
-{
-    ScrnInfoPtr    scrn = xf86ScreenToScrn (screen);
-    PixmapPtr      pixmap;
-    qxl_screen_t * qxl = scrn->driverPrivate;
-    qxl_surface_t *surface;
-    
-    if (w > 32767 || h > 32767)
-	return NULL;
-    
-    qxl_surface_cache_sanity_check (qxl->surface_cache);
-    
-#if 0
-    ErrorF ("Create pixmap: %d %d @ %d (usage: %d)\n", w, h, depth, usage);
-#endif
-    
-    if (uxa_swapped_out (screen))
-	goto fallback;
-
-    if (depth == 8 && !qxl_has_a8_surfaces (qxl))
-    {
-	/* FIXME: When we detect a _change_ in the property of having a8
-	 * surfaces, we should copy all existing a8 surface to host memory
-	 * and then destroy the ones on the device.
-	 */
-	goto fallback;
-    }
-    
-    surface = qxl_surface_create (qxl->surface_cache, w, h, depth);
-    
-    if (surface)
-    {
-	/* ErrorF ("   Successfully created surface in video memory\n"); */
-	
-	pixmap = fbCreatePixmap (screen, 0, 0, depth, usage);
-	
-	screen->ModifyPixmapHeader (pixmap, w, h,
-	                            -1, -1, -1,
-	                            NULL);
-	
-#if 0
-	ErrorF ("Create pixmap %p with surface %p\n", pixmap, surface);
-#endif
-	set_surface (pixmap, surface);
-	qxl_surface_set_pixmap (surface, pixmap);
-	
-	qxl_surface_cache_sanity_check (qxl->surface_cache);
-    }
-    else
-    {
-#if 0
-	ErrorF ("   Couldn't allocate %d x %d @ %d surface in video memory\n",
-	        w, h, depth);
-#endif
-    fallback:
-	pixmap = fbCreatePixmap (screen, w, h, depth, usage);
-	
-#if 0
-	ErrorF ("Create pixmap %p without surface\n", pixmap);
-#endif
-    }
-    
-    return pixmap;
-}
-
-static Bool
-qxl_destroy_pixmap (PixmapPtr pixmap)
-{
-    ScreenPtr      screen = pixmap->drawable.pScreen;
-    ScrnInfoPtr    scrn = xf86ScreenToScrn (screen);
-    qxl_screen_t * qxl = scrn->driverPrivate;
-    qxl_surface_t *surface = NULL;
-    
-    qxl_surface_cache_sanity_check (qxl->surface_cache);
-    
-    if (pixmap->refcnt == 1)
-    {
-	surface = get_surface (pixmap);
-	
-#if 0
-	ErrorF ("- Destroy %p (had surface %p)\n", pixmap, surface);
-#endif
-	
-	if (surface)
-	{
-	    qxl_surface_kill (surface);
-	    set_surface (pixmap, NULL);
-	    
-	    qxl_surface_cache_sanity_check (qxl->surface_cache);
-	}
-    }
-    
-    fbDestroyPixmap (pixmap);
-    return TRUE;
-}
-
-static Bool
-setup_uxa (qxl_screen_t *qxl, ScreenPtr screen)
-{
-    ScrnInfoPtr scrn = xf86ScreenToScrn (screen);
-    
-#if HAS_DIXREGISTERPRIVATEKEY
-    if (!dixRegisterPrivateKey (&uxa_pixmap_index, PRIVATE_PIXMAP, 0))
-	return FALSE;
-#else
-    if (!dixRequestPrivate (&uxa_pixmap_index, 0))
-	return FALSE;
-#endif
-    
-    qxl->uxa = uxa_driver_alloc ();
-    if (qxl->uxa == NULL)
-	return FALSE;
-    
-    memset (qxl->uxa, 0, sizeof (*qxl->uxa));
-    
-    qxl->uxa->uxa_major = 1;
-    qxl->uxa->uxa_minor = 0;
-    
-    /* Solid fill */
-    qxl->uxa->check_solid = qxl_check_solid;
-    qxl->uxa->prepare_solid = qxl_prepare_solid;
-    qxl->uxa->solid = qxl_solid;
-    qxl->uxa->done_solid = qxl_done_solid;
-    
-    /* Copy */
-    qxl->uxa->check_copy = qxl_check_copy;
-    qxl->uxa->prepare_copy = qxl_prepare_copy;
-    qxl->uxa->copy = qxl_copy;
-    qxl->uxa->done_copy = qxl_done_copy;
-    
-    /* Composite */
-    qxl->uxa->check_composite = qxl_check_composite;
-    qxl->uxa->check_composite_target = qxl_check_composite_target;
-    qxl->uxa->check_composite_texture = qxl_check_composite_texture;
-    qxl->uxa->prepare_composite = qxl_prepare_composite;
-    qxl->uxa->composite = qxl_composite;
-    qxl->uxa->done_composite = qxl_done_composite;
-    
-    /* PutImage */
-    qxl->uxa->put_image = qxl_put_image;
-    
-    /* Prepare access */
-    qxl->uxa->prepare_access = qxl_prepare_access;
-    qxl->uxa->finish_access = qxl_finish_access;
-    
-    qxl->uxa->pixmap_is_offscreen = qxl_pixmap_is_offscreen;
-    
-    screen->SetScreenPixmap = qxl_set_screen_pixmap;
-    screen->CreatePixmap = qxl_create_pixmap;
-    screen->DestroyPixmap = qxl_destroy_pixmap;
-    
-    if (!uxa_driver_init (screen, qxl->uxa))
-    {
-	xf86DrvMsg (scrn->scrnIndex, X_ERROR,
-	            "UXA initialization failed\n");
-	free (qxl->uxa);
-	return FALSE;
-    }
-    
-#if 0
-    uxa_set_fallback_debug (screen, FALSE);
-#endif
-    
-#if 0
-    if (!uxa_driver_init (screen, qxl->uxa))
-	return FALSE;
-#endif
     
     return TRUE;
 }
@@ -1696,36 +639,44 @@ setup_uxa (qxl_screen_t *qxl, ScreenPtr screen)
 static void
 spiceqxl_screen_init (ScrnInfoPtr pScrn, qxl_screen_t *qxl)
 {
-    SpiceCoreInterface *core;
-    
     // Init spice
     if (!qxl->spice_server)
     {
 	qxl->spice_server = xspice_get_spice_server ();
 	xspice_set_spice_server_options (qxl->options);
-	core = basic_event_loop_init ();
-	spice_server_init (qxl->spice_server, core);
+	qxl->core = basic_event_loop_init ();
+	spice_server_init (qxl->spice_server, qxl->core);
 	qxl_add_spice_display_interface (qxl);
-	qxl->worker->start (qxl->worker);
+	qxl_add_spice_playback_interface (qxl);
+	spiceqxl_vdagent_init (qxl);
+    }
+    else
+    {
+        /* Crashes result from invalid xorg_timer pointers in
+           our watch lists because Xorg clears all timers at server reset. 
+           We would require a fairly substantial revamp of how the
+           spice server is started and operated to avoid this crash.  */
+        ErrorF("WARNING: XSPICE requires -noreset; crashes are now likely.\n");
+    }
+
+    if (! qxl->worker_running)
+    {
+        xspice_register_handlers();
+        spice_server_vm_start(qxl->spice_server);
 	qxl->worker_running = TRUE;
     }
-    qxl->spice_server = qxl->spice_server;
 }
 
 #endif
 
-static Bool
+Bool
 qxl_fb_init (qxl_screen_t *qxl, ScreenPtr pScreen)
 {
     ScrnInfoPtr pScrn = qxl->pScrn;
-    
-#if 0
-    ErrorF ("allocated %d x %d  %p\n", pScrn->virtualX, pScrn->virtualY, qxl->fb);
-#endif
-    
-    if (!fbScreenInit (pScreen, NULL,
+   
+    if (!fbScreenInit (pScreen, qxl_surface_get_host_bits(qxl->primary),
                        pScrn->virtualX, pScrn->virtualY,
-                       pScrn->xDpi, pScrn->yDpi, pScrn->displayWidth,
+                       pScrn->xDpi, pScrn->yDpi, pScrn->virtualX,
                        pScrn->bitsPerPixel))
 	return FALSE;
     
@@ -1765,18 +716,17 @@ qxl_screen_init (SCREEN_INIT_ARGS_DECL)
 	goto out;
     if (!miSetPixmapDepths ())
 	goto out;
-    pScrn->displayWidth = pScrn->virtualX;
-    
-    qxl->fb = calloc (pScrn->virtualY * pScrn->displayWidth, 4);
-    if (!qxl->fb)
-	goto out;
     
 #if 0
     ErrorF ("allocated %d x %d  %p\n", pScrn->virtualX, pScrn->virtualY, qxl->fb);
 #endif
-    
-    pScrn->virtualX = pScrn->currentMode->HDisplay;
-    pScrn->virtualY = pScrn->currentMode->VDisplay;
+
+    /* Set up resources */
+    qxl_reset_and_create_mem_slots (qxl);
+    ErrorF ("done reset\n");
+
+    qxl->surface_cache = qxl_surface_cache_create (qxl);
+    qxl->primary = qxl_create_primary(qxl);
     
     if (!qxl_fb_init (qxl, pScreen))
 	goto out;
@@ -1797,10 +747,6 @@ qxl_screen_init (SCREEN_INIT_ARGS_DECL)
     
     qxl->uxa = uxa_driver_alloc ();
     
-    /* Set up resources */
-    qxl_reset_and_create_mem_slots (qxl);
-    ErrorF ("done reset\n");
-    
 #ifndef XSPICE
     qxl->io_pages = (void *)((unsigned long)qxl->ram);
     qxl->io_pages_physical = (void *)((unsigned long)qxl->ram_physical);
@@ -1816,17 +762,13 @@ qxl_screen_init (SCREEN_INIT_ARGS_DECL)
                                          sizeof (uint64_t),
                                          QXL_RELEASE_RING_SIZE, 0, qxl);
     
-    qxl->surface_cache = qxl_surface_cache_create (qxl);
-    
     /* xf86DPMSInit (pScreen, xf86DPMSSet, 0); */
     
     pScreen->SaveScreen = qxl_blank_screen;
     
-    setup_uxa (qxl, pScreen);
+    qxl_uxa_init (qxl, pScreen);
 
-#if 0
-    uxa_set_fallback_debug(pScreen, TRUE);
-#endif
+    uxa_set_fallback_debug (pScreen, qxl->debug_render_fallbacks);
     
     DamageSetup (pScreen);
     
@@ -1876,6 +818,9 @@ qxl_screen_init (SCREEN_INIT_ARGS_DECL)
     /* bounds" */
     xf86RandR12SetTransformSupport (pScreen, TRUE);
     
+    if (qxl->deferred_fps)
+        dfps_start_ticker(qxl);
+
     return TRUE;
     
 out:
@@ -1925,11 +870,12 @@ qxl_leave_vt (VT_FUNC_ARGS_DECL)
     qxl_screen_t *qxl = pScrn->driverPrivate;
     
     xf86_hide_cursors (pScrn);
-    
+
     pScrn->EnableDisableFBAccess (XF86_SCRN_ARG (pScrn), FALSE);
-    
-    qxl->vt_surfaces = qxl_surface_cache_evacuate_all (qxl->surface_cache);
-    
+
+    if (qxl->deferred_fps <= 0)
+        qxl->vt_surfaces = qxl_surface_cache_evacuate_all (qxl->surface_cache);
+
     ioport_write (qxl, QXL_IO_RESET, 0);
     
     qxl_restore_state (pScrn);
@@ -2025,330 +971,47 @@ qxl_check_device (ScrnInfoPtr pScrn, qxl_screen_t *qxl)
 
 #endif /* !XSPICE */
 
-static DisplayModePtr
-screen_create_mode (ScrnInfoPtr pScrn, int width, int height, int type)
+Bool
+qxl_pre_init_common(ScrnInfoPtr pScrn)
 {
-    DisplayModePtr mode;
-    
-    mode = xnfcalloc (1, sizeof (DisplayModeRec));
-    
-    mode->status = MODE_OK;
-    mode->type = type;
-    mode->HDisplay   = width;
-    mode->HSyncStart = (width * 105 / 100 + 7) & ~7;
-    mode->HSyncEnd   = (width * 115 / 100 + 7) & ~7;
-    mode->HTotal     = (width * 130 / 100 + 7) & ~7;
-    mode->VDisplay   = height;
-    mode->VSyncStart = height + 1;
-    mode->VSyncEnd   = height + 4;
-    mode->VTotal     = height * 1035 / 1000;
-    mode->Clock = mode->HTotal * mode->VTotal * 60 / 1000;
-    mode->Flags = V_NHSYNC | V_PVSYNC;
-    
-    xf86SetModeDefaultName (mode);
-    xf86SetModeCrtc (mode, pScrn->adjustFlags); /* needed? xf86-video-modesetting does this */
-    
-    return mode;
-}
+    int           scrnIndex = pScrn->scrnIndex;
+    qxl_screen_t *qxl = pScrn->driverPrivate;
 
-static DisplayModePtr
-qxl_add_mode (qxl_screen_t *qxl, ScrnInfoPtr pScrn, int width, int height, int type)
-{
-    DisplayModePtr mode;
-    
-    mode = screen_create_mode (pScrn, width, height, type);
-    qxl->x_modes = xf86ModesAdd (qxl->x_modes, mode);
-    
-    return mode;
-}
+    if (!qxl_color_setup (pScrn))
+	goto out;
 
-static DisplayModePtr
-qxl_output_get_modes (xf86OutputPtr output)
-{
-    qxl_output_private *qxl_output = output->driver_private;
-    DisplayModePtr      modes = xf86DuplicateModes (qxl_output->qxl->pScrn, qxl_output->qxl->x_modes);
-    
-    if (output &&
-        output->crtc && output->crtc->enabled)
-    {
-	DisplayModePtr crtc_mode = &output->crtc->mode;
-	crtc_mode = screen_create_mode (qxl_output->qxl->pScrn, crtc_mode->HDisplay, crtc_mode->VDisplay, M_T_PREFERRED);
-	output->crtc->mode = *crtc_mode;
-	modes = xf86ModesAdd (modes, crtc_mode);
-    }
-    
-    /* xf86ProbeOutputModes owns this memory */
-    return modes;
-}
+    /* option parsing and card differentiation */
+    xf86CollectOptions (pScrn, NULL);
+    memcpy (qxl->options, DefaultOptions, sizeof (DefaultOptions));
+    xf86ProcessOptions (scrnIndex, pScrn->options, qxl->options);
 
-static void
-qxl_output_destroy (xf86OutputPtr output)
-{
-    qxl_output_private *qxl_output = output->driver_private;
-    
-    xf86DrvMsg (qxl_output->qxl->pScrn->scrnIndex, X_INFO,
-                "%s", __func__);
-}
+    qxl->enable_image_cache =
+        get_bool_option (qxl->options, OPTION_ENABLE_IMAGE_CACHE, "QXL_ENABLE_IMAGE_CACHE");
+    qxl->enable_fallback_cache =
+        get_bool_option (qxl->options, OPTION_ENABLE_FALLBACK_CACHE, "QXL_ENABLE_FALLBACK_CACHE");
+    qxl->enable_surfaces =
+        get_bool_option (qxl->options, OPTION_ENABLE_SURFACES, "QXL_ENABLE_SURFACES");
+    qxl->debug_render_fallbacks =
+        get_bool_option (qxl->options, OPTION_DEBUG_RENDER_FALLBACKS, "QXL_DEBUG_RENDER_FALLBACKS");
+    qxl->num_heads =
+        get_int_option (qxl->options, OPTION_NUM_HEADS, "QXL_NUM_HEADS");
 
-static void
-qxl_output_dpms (xf86OutputPtr output, int mode)
-{
-}
+    qxl->deferred_fps = get_int_option(qxl->options, OPTION_SPICE_DEFERRED_FPS, "XSPICE_DEFERRED_FPS");
+    if (qxl->deferred_fps > 0)
+        xf86DrvMsg(scrnIndex, X_INFO, "Deferred FPS: %d\n", qxl->deferred_fps);
+    else
+        xf86DrvMsg(scrnIndex, X_INFO, "Deferred Frames: Disabled\n");
 
-static void
-qxl_output_create_resources (xf86OutputPtr output)
-{
-}
+    xf86DrvMsg (scrnIndex, X_INFO, "Offscreen Surfaces: %s\n",
+                qxl->enable_surfaces ? "Enabled" : "Disabled");
+    xf86DrvMsg (scrnIndex, X_INFO, "Image Cache: %s\n",
+                qxl->enable_image_cache ? "Enabled" : "Disabled");
+    xf86DrvMsg (scrnIndex, X_INFO, "Fallback Cache: %s\n",
+                qxl->enable_fallback_cache ? "Enabled" : "Disabled");
 
-static Bool
-qxl_output_set_property (xf86OutputPtr output, Atom property,
-                         RRPropertyValuePtr value)
-{
-    /* EDID data is stored in the "EDID" atom property, we must return
-     * TRUE here for that. No penalty to say ok to everything else. */
     return TRUE;
-}
-
-static Bool
-qxl_output_get_property (xf86OutputPtr output, Atom property)
-{
-    return TRUE;
-}
-
-static xf86OutputStatus
-qxl_output_detect (xf86OutputPtr output)
-{
-    qxl_output_private *qxl_output = output->driver_private;
-    
-    return qxl_output->status;
-}
-
-static Bool
-qxl_output_mode_valid (xf86OutputPtr output, DisplayModePtr pModes)
-{
-    return MODE_OK;
-}
-
-static const xf86OutputFuncsRec qxl_output_funcs = {
-    .dpms = qxl_output_dpms,
-    .create_resources = qxl_output_create_resources,
-#ifdef RANDR_12_INTERFACE
-    .set_property = qxl_output_set_property,
-    .get_property = qxl_output_get_property,
-#endif
-    .detect = qxl_output_detect,
-    .mode_valid = qxl_output_mode_valid,
-    
-    .get_modes = qxl_output_get_modes,
-    .destroy = qxl_output_destroy
-};
-
-static void
-qxl_crtc_dpms (xf86CrtcPtr crtc, int mode)
-{
-}
-
-static Bool
-qxl_crtc_set_mode_major (xf86CrtcPtr crtc, DisplayModePtr mode,
-                         Rotation rotation, int x, int y)
-{
-    qxl_crtc_private *crtc_private = crtc->driver_private;
-    qxl_screen_t *    qxl = crtc_private->qxl;
-    
-    CHECK_POINT ();
-    
-    if (!crtc_set_mode_major (crtc, mode, rotation, x, y))
-	return FALSE;
-    
-    check_crtc (qxl);
-    qxl_update_monitors_config (qxl);
-    
-    return TRUE;
-}
-
-static void
-qxl_crtc_set_cursor_colors (xf86CrtcPtr crtc, int bg, int fg)
-{
-}
-
-static void
-qxl_crtc_set_cursor_position (xf86CrtcPtr crtc, int x, int y)
-{
-}
-
-static void
-qxl_crtc_load_cursor_argb (xf86CrtcPtr crtc, CARD32 *image)
-{
-}
-
-static void
-qxl_crtc_hide_cursor (xf86CrtcPtr crtc)
-{
-}
-
-static void
-qxl_crtc_show_cursor (xf86CrtcPtr crtc)
-{
-}
-
-static void
-qxl_crtc_gamma_set (xf86CrtcPtr crtc, uint16_t *red, uint16_t *green,
-                    uint16_t *blue, int size)
-{
-}
-
-static void
-qxl_crtc_destroy (xf86CrtcPtr crtc)
-{
-    qxl_crtc_private *crtc_private = crtc->driver_private;
-    qxl_screen_t *    qxl = crtc_private->qxl;
-    
-    xf86DrvMsg (qxl->pScrn->scrnIndex, X_INFO, "%s\n", __func__);
-}
-
-static Bool
-qxl_crtc_lock (xf86CrtcPtr crtc)
-{
-    qxl_crtc_private *crtc_private = crtc->driver_private;
-    qxl_screen_t *    qxl = crtc_private->qxl;
-    
-    xf86DrvMsg (qxl->pScrn->scrnIndex, X_INFO, "%s\n", __func__);
-    return TRUE;
-}
-
-static void
-qxl_crtc_unlock (xf86CrtcPtr crtc)
-{
-    qxl_crtc_private *crtc_private = crtc->driver_private;
-    qxl_screen_t *    qxl = crtc_private->qxl;
-    
-    xf86DrvMsg (qxl->pScrn->scrnIndex, X_INFO, "%s\n", __func__);
-    qxl_update_monitors_config (qxl);
-}
-
-static const xf86CrtcFuncsRec qxl_crtc_funcs = {
-    .dpms = qxl_crtc_dpms,
-    .set_mode_major = qxl_crtc_set_mode_major,
-    .set_cursor_colors = qxl_crtc_set_cursor_colors,
-    .set_cursor_position = qxl_crtc_set_cursor_position,
-    .show_cursor = qxl_crtc_show_cursor,
-    .hide_cursor = qxl_crtc_hide_cursor,
-    .load_cursor_argb = qxl_crtc_load_cursor_argb,
-    .lock = qxl_crtc_lock,
-    .unlock = qxl_crtc_unlock,
-    
-    .gamma_set = qxl_crtc_gamma_set,
-    .destroy = qxl_crtc_destroy,
-};
-
-static Bool
-qxl_xf86crtc_resize (ScrnInfoPtr scrn, int width, int height)
-{
-    qxl_screen_t *qxl = scrn->driverPrivate;
-    
-    xf86DrvMsg (scrn->scrnIndex, X_INFO, "%s: Placeholder resize %dx%d\n",
-                __func__, width, height);
-    if (!qxl_resize_primary (qxl, width, height))
-	return FALSE;
-    
-    scrn->virtualX = width;
-    scrn->virtualY = height;
-    
-    // when starting, no monitor is enabled, and count == 0
-    // we want to avoid server/client freaking out with temporary config
-    if (check_crtc (qxl) != 0)
-	qxl_update_monitors_config (qxl);
-    
-    return TRUE;
-}
-
-static const xf86CrtcConfigFuncsRec qxl_xf86crtc_config_funcs = {
-    qxl_xf86crtc_resize
-};
-
-static void
-qxl_init_randr (ScrnInfoPtr pScrn, qxl_screen_t *qxl)
-{
-    char                name[32];
-    qxl_output_private *qxl_output;
-    qxl_crtc_private *  qxl_crtc;
-    int                 i;
-    xf86OutputPtr       output;
-    
-    xf86CrtcConfigInit (pScrn, &qxl_xf86crtc_config_funcs);
-    
-    /* CHECKME: This is actually redundant, it's overwritten by a later call via
-     * xf86InitialConfiguration */
-    xf86CrtcSetSizeRange (pScrn, 320, 200, 8192, 8192);
-    
-    qxl->crtcs = xnfcalloc (sizeof (xf86CrtcPtr), qxl->num_heads);
-    qxl->outputs = xnfcalloc (sizeof (xf86OutputPtr), qxl->num_heads);
-    
-    for (i = 0 ; i < qxl->num_heads; ++i)
-    {
-	qxl->crtcs[i] = xf86CrtcCreate (pScrn, &qxl_crtc_funcs);
-	if (!qxl->crtcs[i])
-	    xf86DrvMsg (pScrn->scrnIndex, X_ERROR, "failed to create Crtc %d", i);
-	
-	qxl_crtc = xnfcalloc (sizeof (qxl_crtc_private), 1);
-	qxl->crtcs[i]->driver_private = qxl_crtc;
-	qxl_crtc->head = i;
-	qxl_crtc->qxl = qxl;
-	snprintf (name, sizeof (name), "qxl-%d", i);
-	qxl->outputs[i] = output = xf86OutputCreate (pScrn, &qxl_output_funcs, name);
-	if (!output)
-	    xf86DrvMsg (pScrn->scrnIndex, X_ERROR, "failed to create Output %d", i);
-	
-	output->possible_crtcs = (1 << i); /* bitrange of allowed outputs - do a 1:1 */
-	output->possible_clones = 0; /* TODO: not? */
-	qxl_output = xnfcalloc (sizeof (qxl_output_private), 1);
-	output->driver_private = qxl_output;
-	qxl_output->head = i;
-	qxl_output->qxl = qxl;
-	qxl_output->status = XF86OutputStatusConnected;
-	qxl_crtc->output = output;
-    }
-    
-    qxl->virtual_x = 1024;
-    qxl->virtual_y = 768;
-    
-    pScrn->display->virtualX = qxl->virtual_x;
-    pScrn->display->virtualY = qxl->virtual_y;
-    
-    xf86InitialConfiguration (pScrn, TRUE);
-    /* all crtcs are enabled here, but their mode is 0,
-       resulting monitor config empty atm */
-}
-
-static void
-qxl_initialize_x_modes (qxl_screen_t *qxl, ScrnInfoPtr pScrn,
-                        unsigned int *max_x, unsigned int *max_y)
-{
-    int i;
-    int size;
-    
-    *max_x = *max_y = 0;
-    /* Create a list of modes used by the qxl_output_get_modes */
-    for (i = 0; i < qxl->num_modes; i++)
-    {
-	if (qxl->modes[i].orientation == 0)
-	{
-	    size = qxl->modes[i].x_res * qxl->modes[i].y_res * 4;
-	    if (size > qxl->surface0_size)
-	    {
-		ErrorF ("skipping mode %dx%d not fitting in surface0",
-		        qxl->modes[i].x_res, qxl->modes[i].y_res);
-		continue;
-	    }
-	    
-	    qxl_add_mode (qxl, pScrn, qxl->modes[i].x_res, qxl->modes[i].y_res,
-	                  M_T_DRIVER);
-	    if (qxl->modes[i].x_res > *max_x)
-		*max_x = qxl->modes[i].x_res;
-	    if (qxl->modes[i].y_res > *max_y)
-		*max_y = qxl->modes[i].y_res;
-	}
-    }
+out:
+    return FALSE;
 }
 
 static Bool
@@ -2360,7 +1023,10 @@ qxl_pre_init (ScrnInfoPtr pScrn, int flags)
     //int *linePitches = NULL;
     //DisplayModePtr mode;
     unsigned int max_x, max_y;
-    
+#ifdef XSPICE
+    const char *playback_fifo_dir;
+#endif
+
     /* In X server 1.7.5, Xorg -configure will cause this
      * function to get called without a confScreen.
      */
@@ -2369,8 +1035,7 @@ qxl_pre_init (ScrnInfoPtr pScrn, int flags)
     
     CHECK_POINT ();
     
-    mspace_set_abort_func (qxl_mspace_abort_func);
-    mspace_set_print_func (qxl_mspace_print_func);
+    qxl_mem_init();
     
     /* zaphod mode is for suckers and i choose not to implement it */
     if (xf86IsEntityShared (pScrn->entityList[0]))
@@ -2383,12 +1048,13 @@ qxl_pre_init (ScrnInfoPtr pScrn, int flags)
 	pScrn->driverPrivate = xnfcalloc (sizeof (qxl_screen_t), 1);
     
     qxl = pScrn->driverPrivate;
-    memset (qxl, 0, sizeof (qxl));
     qxl->device_primary = QXL_DEVICE_PRIMARY_UNDEFINED;
     qxl->pScrn = pScrn;
     qxl->x_modes = NULL;
     qxl->entity = xf86GetEntityInfo (pScrn->entityList[0]);
-    
+    qxl->kms_enabled = FALSE;
+    xorg_list_init(&qxl->ums_bos);
+
 #ifndef XSPICE
     qxl->pci = xf86GetPciInfoForEntity (qxl->entity->index);
 #ifndef XSERVER_LIBPCIACCESS
@@ -2400,31 +1066,21 @@ qxl_pre_init (ScrnInfoPtr pScrn, int flags)
     }
 #endif /* XSPICE */
     pScrn->monitor = pScrn->confScreen->monitor;
-    
-    if (!qxl_color_setup (pScrn))
+
+    qxl_ums_setup_funcs(qxl);
+
+    if (!qxl_pre_init_common(pScrn))
 	goto out;
-    
-    /* option parsing and card differentiation */
-    xf86CollectOptions (pScrn, NULL);
-    memcpy (qxl->options, DefaultOptions, sizeof (DefaultOptions));
-    xf86ProcessOptions (scrnIndex, pScrn->options, qxl->options);
-    
-    qxl->enable_image_cache =
-        xf86ReturnOptValBool (qxl->options, OPTION_ENABLE_IMAGE_CACHE, TRUE);
-    qxl->enable_fallback_cache =
-        xf86ReturnOptValBool (qxl->options, OPTION_ENABLE_FALLBACK_CACHE, TRUE);
-    qxl->enable_surfaces =
-        xf86ReturnOptValBool (qxl->options, OPTION_ENABLE_SURFACES, TRUE);
-    qxl->num_heads =
-        get_int_option (qxl->options, OPTION_NUM_HEADS, "QXL_NUM_HEADS");
-    
-    xf86DrvMsg (scrnIndex, X_INFO, "Offscreen Surfaces: %s\n",
-                qxl->enable_surfaces ? "Enabled" : "Disabled");
-    xf86DrvMsg (scrnIndex, X_INFO, "Image Cache: %s\n",
-                qxl->enable_image_cache ? "Enabled" : "Disabled");
-    xf86DrvMsg (scrnIndex, X_INFO, "Fallback Cache: %s\n",
-                qxl->enable_fallback_cache ? "Enabled" : "Disabled");
-    
+
+#ifdef XSPICE
+    playback_fifo_dir = get_str_option(qxl->options, OPTION_SPICE_PLAYBACK_FIFO_DIR,
+               "XSPICE_PLAYBACK_FIFO_DIR");
+    if (playback_fifo_dir)
+        strncpy(qxl->playback_fifo_dir, playback_fifo_dir, sizeof(qxl->playback_fifo_dir));
+    else
+        qxl->playback_fifo_dir[0] = '\0';
+#endif
+
     if (!qxl_map_memory (qxl, scrnIndex))
 	goto out;
     
@@ -2434,7 +1090,13 @@ qxl_pre_init (ScrnInfoPtr pScrn, int flags)
 #else
     xspice_init_qxl_ram (qxl); /* initialize the rings */
 #endif
-    pScrn->videoRam = (qxl->rom->num_pages * 4096) / 1024;
+
+#define DIV_ROUND_UP(n, a) (((n) + (a) - 1) / (a))
+#define BYTES_TO_KB(bytes) DIV_ROUND_UP(bytes, 1024)
+#define PAGES_TO_KB(pages) ((pages) * getpagesize() / 1024)
+
+    pScrn->videoRam = PAGES_TO_KB(qxl->rom->num_pages)
+                      - BYTES_TO_KB(qxl->monitors_config_size);
     xf86DrvMsg (scrnIndex, X_INFO, "%d KB of video RAM\n", pScrn->videoRam);
     xf86DrvMsg (scrnIndex, X_INFO, "%d surfaces\n", qxl->rom->n_surfaces);
     
@@ -2462,51 +1124,15 @@ qxl_pre_init (ScrnInfoPtr pScrn, int flags)
 	pScrn->monitor->vrefresh[0].hi = 75;
 	pScrn->monitor->nVrefresh = 1;
     }
-    
+
     qxl_initialize_x_modes (qxl, pScrn, &max_x, &max_y);
-    
-#if 0
-    if (pScrn->display->virtualX == 0 && pScrn->display->virtualY == 0)
-    {
-	/* It is possible for the largest x + largest y size combined leading
-	   to a virtual size which will not fit into the framebuffer when this
-	   happens we prefer max width and make height as large as possible */
-	if (max_x * max_y * (pScrn->bitsPerPixel / 8) >
-	    qxl->rom->surface0_area_size)
-	    pScrn->display->virtualY = qxl->rom->surface0_area_size /
-		(max_x * (pScrn->bitsPerPixel / 8));
-	else
-	    pScrn->display->virtualY = max_y;
-	
-	pScrn->display->virtualX = max_x;
-    }
-    
-    if (0 >= xf86ValidateModes (pScrn, pScrn->monitor->Modes,
-                                pScrn->display->modes, clockRanges, linePitches,
-                                128, max_x, 128 * 4, 128, max_y,
-                                pScrn->display->virtualX,
-                                pScrn->display->virtualY,
-                                128 * 1024 * 1024, LOOKUP_BEST_REFRESH))
-	goto out;
-#endif
     
     CHECK_POINT ();
     
     xf86PruneDriverModes (pScrn);
     
     qxl_init_randr (pScrn, qxl);
-#if 0
-    /* If no modes are specified in xorg.conf, default to 1024x768 */
-    if (pScrn->display->modes == NULL || pScrn->display->modes[0] == NULL)
-	for (mode = pScrn->modes; mode; mode = mode->next)
-	    if (mode->HDisplay == 1024 && mode->VDisplay == 768)
-	    {
-		pScrn->currentMode = mode;
-		break;
-	    }
-#endif
-    
-    //xf86PrintModes (pScrn);
+
     xf86SetDpi (pScrn, 0, 0);
     
     if (!xf86LoadSubModule (pScrn, "fb")
@@ -2591,18 +1217,63 @@ qxl_identify (int flags)
 }
 
 static void
-qxl_init_scrn (ScrnInfoPtr pScrn)
+qxl_init_scrn (ScrnInfoPtr pScrn, Bool kms)
 {
     pScrn->driverVersion    = 0;
-    pScrn->driverName       = QXL_DRIVER_NAME;
-    pScrn->name             = QXL_DRIVER_NAME;
-    pScrn->PreInit          = qxl_pre_init;
-    pScrn->ScreenInit       = qxl_screen_init;
-    pScrn->SwitchMode       = qxl_switch_mode;
-    pScrn->ValidMode        = NULL,
+    pScrn->driverName       = driver_name;
+    pScrn->name             = driver_name;
+
+    if (kms) {
+#if !defined(XSPICE) && defined(XF86DRM_MODE)
+	pScrn->PreInit          = qxl_pre_init_kms;
+	pScrn->ScreenInit       = qxl_screen_init_kms;
+	pScrn->EnterVT          = qxl_enter_vt_kms;
+	pScrn->LeaveVT          = qxl_leave_vt_kms;
+#endif
+    } else {
+	pScrn->PreInit          = qxl_pre_init;
+	pScrn->ScreenInit       = qxl_screen_init;
 	pScrn->EnterVT          = qxl_enter_vt;
-    pScrn->LeaveVT          = qxl_leave_vt;
+	pScrn->LeaveVT          = qxl_leave_vt;
+    }
+    pScrn->SwitchMode       = qxl_switch_mode;
+    pScrn->ValidMode        = NULL;
 }
+
+#ifdef XF86DRM_MODE
+static char *
+CreatePCIBusID(const struct pci_device *dev)
+{
+    char *busID;
+
+    if (asprintf(&busID, "pci:%04x:%02x:%02x.%d",
+                 dev->domain, dev->bus, dev->dev, dev->func) == -1)
+        return NULL;
+
+    return busID;
+}
+
+static Bool qxl_kernel_mode_enabled(ScrnInfoPtr pScrn, struct pci_device *pci_dev)
+{
+    char *busIdString;
+    int ret;
+
+    busIdString = CreatePCIBusID(pci_dev);
+    ret = drmCheckModesettingSupported(busIdString);
+    free(busIdString);
+    if (ret) {
+      xf86DrvMsgVerb(pScrn->scrnIndex, X_INFO, 0,
+		   "[KMS] drm report modesetting isn't supported.\n");
+	return FALSE;
+    }
+
+    xf86DrvMsgVerb(pScrn->scrnIndex, X_INFO, 0,
+		   "[KMS] Kernel modesetting enabled.\n");
+    return TRUE;
+}
+#else
+#define qxl_kernel_mode_enabled(x, y) FALSE
+#endif
 
 #ifdef XSPICE
 static Bool
@@ -2617,9 +1288,9 @@ qxl_probe (struct _DriverRec *drv, int flags)
 	return TRUE;
     
     pScrn = xf86AllocateScreen (drv, flags);
-    qxl_init_scrn (pScrn);
+    qxl_init_scrn (pScrn, FALSE);
     
-    xf86MatchDevice (QXL_DRIVER_NAME, &device);
+    xf86MatchDevice (driver_name, &device);
     entityIndex = xf86ClaimNoSlot (drv, 0, device[0], TRUE);
     pEnt = xf86GetEntityInfo (entityIndex);
     pEnt->driver = drv;
@@ -2675,7 +1346,7 @@ qxl_probe (DriverPtr drv, int flags)
 	ScrnInfoPtr pScrn = NULL;
 	if ((pScrn = xf86ConfigPciEntity (pScrn, 0, usedChips[i], qxlPciChips,
 	                                  0, 0, 0, 0, 0)))
-	    qxl_init_scrn (pScrn);
+	    qxl_init_scrn (pScrn, FALSE);
     }
     
     xfree (usedChips);
@@ -2690,16 +1361,23 @@ qxl_pci_probe (DriverPtr drv, int entity, struct pci_device *dev, intptr_t match
     qxl_screen_t *qxl;
     ScrnInfoPtr   pScrn = xf86ConfigPciEntity (NULL, 0, entity, NULL, NULL,
                                                NULL, NULL, NULL, NULL);
+    Bool kms = FALSE;
     
     if (!pScrn)
 	return FALSE;
-    
+
+    if (dev) {
+	if (qxl_kernel_mode_enabled(pScrn, dev)) {    
+	    kms = TRUE;
+	}
+    }
+
     if (!pScrn->driverPrivate)
 	pScrn->driverPrivate = xnfcalloc (sizeof (qxl_screen_t), 1);
     qxl = pScrn->driverPrivate;
     qxl->pci = dev;
     
-    qxl_init_scrn (pScrn);
+    qxl_init_scrn (pScrn, kms);
     
     return TRUE;
 }
@@ -2711,7 +1389,7 @@ qxl_pci_probe (DriverPtr drv, int entity, struct pci_device *dev, intptr_t match
 
 static DriverRec qxl_driver = {
     0,
-    QXL_DRIVER_NAME,
+    driver_name,
     qxl_identify,
     qxl_probe,
     qxl_available_options,
@@ -2755,12 +1433,12 @@ qxl_setup (pointer module, pointer opts, int *errmaj, int *errmin)
 
 static XF86ModuleVersionInfo qxl_module_info =
 {
-    QXL_DRIVER_NAME,
+    driver_name,
     MODULEVENDORSTRING,
     MODINFOSTRING1,
     MODINFOSTRING2,
     XORG_VERSION_CURRENT,
-    0, 0, 0,
+    PACKAGE_VERSION_MAJOR, PACKAGE_VERSION_MINOR, PACKAGE_VERSION_PATCHLEVEL,
     ABI_CLASS_VIDEODRV,
     ABI_VIDEODRV_VERSION,
     MOD_CLASS_VIDEODRV,

@@ -50,7 +50,7 @@ SpiceServer *xspice_get_spice_server(void)
 
 /* config string parsing */
 
-#define ARRAY_SIZE(x) (sizeof(x) / sizeof((x)[0]))
+#define SPICE_ARRAY_SIZE(x) (sizeof(x) / sizeof((x)[0]))
 
 static int name2enum(const char *string, const char *table[], int entries)
 {
@@ -88,7 +88,7 @@ static const char *stream_video_names[] = {
     [ SPICE_STREAM_VIDEO_FILTER ] = "filter",
 };
 #define parse_stream_video(_name) \
-    name2enum(_name, stream_video_names, ARRAY_SIZE(stream_video_names))
+    name2enum(_name, stream_video_names, SPICE_ARRAY_SIZE(stream_video_names))
 
 static const char *compression_names[] = {
     [ SPICE_IMAGE_COMPRESS_OFF ]      = "off",
@@ -100,7 +100,7 @@ static const char *compression_names[] = {
 };
 #define parse_compression(_name)                                        \
     parse_name(_name, "image compression",                              \
-               compression_names, ARRAY_SIZE(compression_names))
+               compression_names, SPICE_ARRAY_SIZE(compression_names))
 
 static const char *wan_compression_names[] = {
     [ SPICE_WAN_COMPRESSION_AUTO   ] = "auto",
@@ -109,7 +109,7 @@ static const char *wan_compression_names[] = {
 };
 #define parse_wan_compression(_name)                                    \
     parse_name(_name, "wan compression",                                \
-               wan_compression_names, ARRAY_SIZE(wan_compression_names))
+               wan_compression_names, SPICE_ARRAY_SIZE(wan_compression_names))
 
 void xspice_set_spice_server_options(OptionInfoPtr options)
 {
@@ -158,6 +158,9 @@ void xspice_set_spice_server_options(OptionInfoPtr options)
     int disable_copy_paste =
         get_bool_option(options, OPTION_SPICE_DISABLE_COPY_PASTE,
                         "XSPICE_DISABLE_COPY_PASTE");
+    int exit_on_disconnect =
+        get_bool_option(options, OPTION_SPICE_EXIT_ON_DISCONNECT,
+                        "XSPICE_EXIT_ON_DISCONNECT");
     const char *image_compression =
         get_str_option(options, OPTION_SPICE_IMAGE_COMPRESSION,
                        "XSPICE_IMAGE_COMPRESSION");
@@ -262,6 +265,15 @@ void xspice_set_spice_server_options(OptionInfoPtr options)
         spice_server_set_agent_copypaste(spice_server, 0);
     }
 #endif
+
+    if (exit_on_disconnect) {
+#if SPICE_SERVER_VERSION >= 0x000b04 /* 0.11.4 */
+        spice_server_set_exit_on_disconnect(spice_server, exit_on_disconnect);
+#else
+        fprintf(stderr, "spice: cannot set exit_on_disconnect (spice >= 0.11.4 required)\n");
+        exit(1);
+#endif
+    }
 
     compression = SPICE_IMAGE_COMPRESS_AUTO_GLZ;
     if (image_compression) {

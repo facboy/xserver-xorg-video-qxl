@@ -70,6 +70,49 @@ Section "Device"
     # Set to true to only listen on ipv6 interfaces.
     # defaults to false.
     #Option "SpiceIPV6Only" ""
+
+    # If non zero, the driver will render all operations to the frame buffer,
+    #  and keep track of a changed rectangle list.  The changed rectangles
+    #  will be transmitted at the rate requested (e.g. 10 Frames Per Second)
+    # This can dramatically reduce network bandwidth for some use cases.
+    #Option "SpiceDeferredFPS" "10"
+
+    # If set, the Spice Server will exit when the first client disconnects
+    #Option "SpiceExitOnDisconnect" "1"
+
+    # Enable caching of images directly written with uxa->put_image
+    # defaults to True
+    #Option "EnableImageCache" "True"
+
+    # Enable caching of images created by uxa->prepare_access
+    # defaults to True
+    #Option "EnableFallbackCache" "True"
+
+    # Enable the use of off screen srufaces
+    # defaults to True
+    #Option "EnableSurfaces" "True"
+
+    # The number of heads to allocate by default
+    # defaults to 4
+    #Option "NumHeads" "4"
+
+    # Set Spice Agent Mouse
+    # defaults to false
+    #Option "SpiceAgentMouse" "False"
+
+    # Set Spice Playback compression
+    # defaults to true
+    #Option "SpicePlaybackCompression" "True"
+
+    # Disable copy and paste
+    # defaults to false
+    #Option "SpiceDisableCopyPaste" "False"
+
+    # If a directory is given, any file in that
+    #  directory will be read for audio data to be sent
+    #  to the client.   Default is no mixing.
+    #Option "SpicePlaybackFIFODir"  "/tmp/"
+
 EndSection
 
 Section "InputDevice"

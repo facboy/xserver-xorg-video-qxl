@@ -1,5 +1,5 @@
 /*
- * Copyright 2011 Red Hat, Inc.
+ * Copyright 2012 Andrew Eikum for CodeWeavers Inc.
  *
  * Permission is hereby granted, free of charge, to any person obtaining a
  * copy of this software and associated documentation files (the "Software"),
@@ -20,16 +20,12 @@
  * CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
  */
 
-#ifndef QXL_SPICE_DISPLAY_H
-#define QXL_SPICE_DISPLAY_H
+#ifndef QXL_SPICE_AUDIO_H
+#define QXL_SPICE_AUDIO_H
 
 #include "qxl.h"
 #include <spice.h>
 
-void qxl_add_spice_display_interface(qxl_screen_t *qxl);
-/* spice-server to device, now spice-server to xspice */
-void qxl_send_events(qxl_screen_t *qxl, int events);
+int qxl_add_spice_playback_interface(qxl_screen_t *qxl);
 
-void spiceqxl_display_monitors_config(qxl_screen_t *qxl);
-
-#endif // QXL_SPICE_DISPLAY_H
+#endif

@@ -37,12 +37,15 @@
 #endif
 #include "xf86Cursor.h"
 #include "xf86_OSproc.h"
+#ifdef XV
 #include "xf86xv.h"
+#endif
 #include "xf86Crtc.h"
 #include "shadow.h"
 #include "micmap.h"
 #include "uxa/uxa.h"
 
+#include "list.h"
 #ifndef XSPICE
 #ifdef XSERVER_PCIACCESS
 #include "pciaccess.h"
@@ -50,6 +53,18 @@
 #include "fb.h"
 #include "vgaHW.h"
 #endif /* XSPICE */
+
+#include "qxl_drmmode.h"
+
+#if (XORG_VERSION_CURRENT < XORG_VERSION_NUMERIC(1, 11, 99, 903, 0))
+typedef struct list xorg_list_t;
+#define xorg_list_init              list_init
+#define xorg_list_add               list_add
+#define xorg_list_del               list_del
+#define xorg_list_for_each_entry    list_for_each_entry
+#else
+typedef struct xorg_list xorg_list_t;
+#endif
 
 #include "compat-api.h"
 #define hidden _X_HIDDEN
@@ -101,7 +116,9 @@ enum {
     OPTION_ENABLE_IMAGE_CACHE = 0,
     OPTION_ENABLE_FALLBACK_CACHE,
     OPTION_ENABLE_SURFACES,
+    OPTION_DEBUG_RENDER_FALLBACKS,
     OPTION_NUM_HEADS,
+    OPTION_SPICE_DEFERRED_FPS,
 #ifdef XSPICE
     OPTION_SPICE_PORT,
     OPTION_SPICE_TLS_PORT,
@@ -125,6 +142,11 @@ enum {
     OPTION_SPICE_TLS_CIPHERS,
     OPTION_SPICE_CACERT_FILE,
     OPTION_SPICE_DH_FILE,
+    OPTION_SPICE_EXIT_ON_DISCONNECT,
+    OPTION_SPICE_PLAYBACK_FIFO_DIR,
+    OPTION_SPICE_VDAGENT_ENABLED,
+    OPTION_SPICE_VDAGENT_VIRTIO_PATH,
+    OPTION_SPICE_VDAGENT_UINPUT_PATH,
 #endif
     OPTION_COUNT,
 };
@@ -134,6 +156,58 @@ enum {
     QXL_DEVICE_PRIMARY_NONE,
     QXL_DEVICE_PRIMARY_CREATED,
 };
+
+struct qxl_bo;
+/*
+ * for relocations
+ * dst_bo + dst_offset are the bo and offset into which the reloc is being written,
+ * src_bo is the bo who's offset is being relocated.
+ */
+struct qxl_bo_funcs {
+    struct qxl_bo *(*bo_alloc)(qxl_screen_t *qxl, unsigned long size, const char *name);
+    struct qxl_bo *(*cmd_alloc)(qxl_screen_t *qxl, unsigned long size, const char *name);
+    void *(*bo_map)(struct qxl_bo *bo);
+    void (*bo_unmap)(struct qxl_bo *bo);
+    void (*bo_decref)(qxl_screen_t *qxl, struct qxl_bo *bo);
+    void (*bo_incref)(qxl_screen_t *qxl, struct qxl_bo *bo);
+    void (*bo_output_bo_reloc)(qxl_screen_t *qxl, uint32_t dst_offset,
+			       struct qxl_bo *dst_bo, struct qxl_bo *src_bo);
+    void (*write_command)(qxl_screen_t *qxl, uint32_t type, struct qxl_bo *bo);
+    void (*update_area)(qxl_surface_t *surf, int x1, int y1, int x2, int y2);
+    struct qxl_bo *(*create_primary)(qxl_screen_t *qxl, uint32_t width, uint32_t height, int32_t stride, uint32_t format);
+    void (*destroy_primary)(qxl_screen_t *qxl, struct qxl_bo *primary_bo);
+
+    qxl_surface_t *(*create_surface)(qxl_screen_t *qxl, int width,
+				     int height, int bpp);
+    void (*destroy_surface)(qxl_surface_t *surf);
+
+    void (*bo_output_surf_reloc)(qxl_screen_t *qxl, uint32_t dst_offset,
+				 struct qxl_bo *dst_bo,
+				 qxl_surface_t *surf);
+  /* surface create / destroy */
+};
+    
+void qxl_ums_setup_funcs(qxl_screen_t *qxl);
+void qxl_kms_setup_funcs(qxl_screen_t *qxl);
+
+/* ums specific functions */
+struct qxl_bo *qxl_ums_surf_mem_alloc(qxl_screen_t *qxl, uint32_t size);
+struct qxl_bo *qxl_ums_lookup_phy_addr(qxl_screen_t *qxl, uint64_t phy_addr);
+
+typedef struct FrameTimer FrameTimer;
+typedef void (*FrameTimerFunc)(void *opaque);
+
+#ifdef XF86DRM_MODE
+#define MAX_RELOCS 96
+#include "qxl_drm.h"
+
+struct qxl_cmd_stream {
+  struct qxl_bo *reloc_bo[MAX_RELOCS];
+  int n_reloc_bos;
+  struct drm_qxl_reloc relocs[MAX_RELOCS];
+  int n_relocs;
+};
+#endif
 
 struct _qxl_screen_t
 {
@@ -149,7 +223,7 @@ struct _qxl_screen_t
     struct qxl_ring *		release_ring;
 
     int                         device_primary;
-    
+    struct qxl_bo *             primary_bo;
     int				num_modes;
     struct QXLMode *		modes;
     int				io_base;
@@ -162,7 +236,6 @@ struct _qxl_screen_t
 
     int				virtual_x;
     int				virtual_y;
-    void *			fb;
 
     /* not the same as the heads mode for #head > 1 or virtual != head size */
     struct QXLMode 		primary_mode;
@@ -233,16 +306,24 @@ struct _qxl_screen_t
     int				enable_image_cache;
     int				enable_fallback_cache;
     int				enable_surfaces;
+    int                         debug_render_fallbacks;
     
+    FrameTimer *        frames_timer;
+
 #ifdef XSPICE
     /* XSpice specific */
     struct QXLRom		shadow_rom;    /* Parameter RAM */
     SpiceServer *       spice_server;
+    SpiceCoreInterface *core;
+
     QXLWorker *         worker;
     int                 worker_running;
     QXLInstance         display_sin;
+    SpicePlaybackInstance playback_sin;
     /* XSpice specific, dragged from the Device */
     QXLReleaseInfo     *last_release;
+
+    pthread_t audio_thread;
 
     uint32_t           cmdflags;
     uint32_t           oom_running;
@@ -259,7 +340,21 @@ struct _qxl_screen_t
         uint32_t       bytes_pp;
         uint8_t        *data, *flipped;
     } guest_primary;
+
+    char playback_fifo_dir[PATH_MAX];
 #endif /* XSPICE */
+
+    uint32_t deferred_fps;
+    xorg_list_t ums_bos;
+    struct qxl_bo_funcs *bo_funcs;
+
+    Bool kms_enabled;
+#ifdef XF86DRM_MODE
+    drmmode_rec drmmode;
+    int drm_fd;
+    struct qxl_cmd_stream cmds;
+#endif
+
 };
 
 typedef struct qxl_output_private {
@@ -338,9 +433,10 @@ int               qxl_ring_cons        (struct qxl_ring        *ring);
  * Surface
  */
 surface_cache_t *   qxl_surface_cache_create (qxl_screen_t *qxl);
-qxl_surface_t *	    qxl_surface_cache_create_primary (surface_cache_t *qxl,
+qxl_surface_t *	    qxl_surface_cache_create_primary (qxl_screen_t *qxl,
 						struct QXLMode *mode);
-qxl_surface_t *	    qxl_surface_create (surface_cache_t *qxl,
+void *              qxl_surface_get_host_bits(qxl_surface_t *surface);
+qxl_surface_t *	    qxl_surface_create (qxl_screen_t *qxl,
 					int	      width,
 					int	      height,
 					int	      bpp);
@@ -407,11 +503,14 @@ void		   qxl_surface_composite (qxl_surface_t *dest,
 					  int dst_x, int dst_y,
 					  int width, int height);
 
+/* UXA */
 #if HAS_DEVPRIVATEKEYREC
 extern DevPrivateKeyRec uxa_pixmap_index;
 #else
 extern int uxa_pixmap_index;
 #endif
+Bool
+qxl_uxa_init (qxl_screen_t *qxl, ScreenPtr screen);
 
 static inline qxl_surface_t *get_surface (PixmapPtr pixmap)
 {
@@ -434,10 +533,22 @@ get_ram_header (qxl_screen_t *qxl)
 	((uint8_t *)qxl->ram + qxl->rom->ram_header_offset);
 }
 
+void qxl_surface_upload_primary_regions(qxl_screen_t *qxl, PixmapPtr pixmap, RegionRec *r);
+
+/* ums randr code */
+void qxl_init_randr (ScrnInfoPtr pScrn, qxl_screen_t *qxl);
+void qxl_initialize_x_modes (qxl_screen_t *qxl, ScrnInfoPtr pScrn,
+                        unsigned int *max_x, unsigned int *max_y);
+void qxl_update_edid (qxl_screen_t *qxl);
+Bool qxl_create_desired_modes (qxl_screen_t *qxl);
+
+Bool qxl_resize_primary (qxl_screen_t *qxl, uint32_t width, uint32_t height);
+void qxl_io_monitors_config_async (qxl_screen_t *qxl);
+void qxl_allocate_monitors_config (qxl_screen_t *qxl);
 /*
  * Images
  */
-struct QXLImage *qxl_image_create     (qxl_screen_t           *qxl,
+struct qxl_bo *qxl_image_create     (qxl_screen_t           *qxl,
 				       const uint8_t          *data,
 				       int                     x,
 				       int                     y,
@@ -447,30 +558,27 @@ struct QXLImage *qxl_image_create     (qxl_screen_t           *qxl,
 				       int                     Bpp,
 				       Bool		       fallback);
 void              qxl_image_destroy    (qxl_screen_t           *qxl,
-					struct QXLImage       *image);
+				        struct qxl_bo *bo);
 void		  qxl_drop_image_cache (qxl_screen_t	       *qxl);
 
 
 /*
  * Malloc
  */
+void              qxl_mem_init(void);
 int		  qxl_handle_oom (qxl_screen_t *qxl);
 struct qxl_mem *  qxl_mem_create       (void                   *base,
 					unsigned long           n_bytes);
 void              qxl_mem_dump_stats   (struct qxl_mem         *mem,
 					const char             *header);
-void *            qxl_alloc            (struct qxl_mem         *mem,
-					unsigned long           n_bytes,
-					const char *            name);
-void              qxl_free             (struct qxl_mem         *mem,
-					void                   *d,
-					const char *            name);
 void              qxl_mem_free_all     (struct qxl_mem         *mem);
 void *            qxl_allocnf          (qxl_screen_t           *qxl,
 					unsigned long           size,
 					const char *            name);
 int		   qxl_garbage_collect (qxl_screen_t *qxl);
 
+void qxl_reset_and_create_mem_slots (qxl_screen_t *qxl);
+void qxl_mark_mem_unverifiable (qxl_screen_t *qxl);
 #ifdef DEBUG_QXL_MEM
 void qxl_mem_unverifiable(struct qxl_mem *mem);
 #else
@@ -488,10 +596,27 @@ void qxl_io_notify_oom(qxl_screen_t *qxl);
 void qxl_io_flush_surfaces(qxl_screen_t *qxl);
 void qxl_io_destroy_all_surfaces (qxl_screen_t *qxl);
 
-/*
- * qxl_edid.c
- */
-Bool qxl_output_edid_set(xf86OutputPtr output, int head, DisplayModePtr mode);
+#ifdef QXLDRV_RESIZABLE_SURFACE0
+void qxl_io_flush_release (qxl_screen_t *qxl);
+#endif
+
+Bool qxl_pre_init_common(ScrnInfoPtr pScrn);
+Bool qxl_fb_init (qxl_screen_t *qxl, ScreenPtr pScreen);
+Bool qxl_screen_init_kms(SCREEN_INIT_ARGS_DECL);
+Bool qxl_enter_vt_kms (VT_FUNC_ARGS_DECL);
+void qxl_leave_vt_kms (VT_FUNC_ARGS_DECL);
+void qxl_set_screen_pixmap_header (ScreenPtr pScreen);
+Bool qxl_resize_primary_to_virtual (qxl_screen_t *qxl);
+void qxl_get_formats (int bpp, SpiceSurfaceFmt *format, pixman_format_code_t *pformat);
+
+#ifdef XF86DRM_MODE
+Bool qxl_pre_init_kms(ScrnInfoPtr pScrn, int flags);
+Bool qxl_kms_check_cap(qxl_screen_t *qxl, int cap);
+uint32_t qxl_kms_bo_get_handle(struct qxl_bo *_bo);
+#else
+static inline Bool qxl_pre_init_kms(ScrnInfoPtr pScrn, int flags) { return FALSE; }
+static inline Bool qxl_kms_check_cap(qxl_screen_t *qxl, int cap) { return FALSE; }
+#endif
 
 #ifdef XSPICE
 /* device to spice-server, now xspice to spice-server */
@@ -526,5 +651,12 @@ static inline void ioport_write(qxl_screen_t *qxl, int port, int val)
 SpiceServer *xspice_get_spice_server(void);
 
 #endif /* XSPICE */
+
+#ifdef WITH_CHECK_POINT
+#define CHECK_POINT() ErrorF ("%s: %d  (%s)\n", __FILE__, __LINE__, __FUNCTION__);
+#else
+#define CHECK_POINT()
+#endif
+
 
 #endif // QXL_H

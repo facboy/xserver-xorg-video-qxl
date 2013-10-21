@@ -299,7 +299,7 @@ static void select_and_check_watches(void)
     if (retval) {
         RING_FOREACH_SAFE(link, next, &watches) {
             watch = (SpiceWatch*)link;
-            if ((watch->event_mask & SPICE_WATCH_EVENT_READ)
+            if (!watch->remove && (watch->event_mask & SPICE_WATCH_EVENT_READ)
                  && FD_ISSET(watch->fd, &rfds)) {
                 watch->func(watch->fd, SPICE_WATCH_EVENT_READ, watch->opaque);
             }
@@ -352,6 +352,10 @@ SpiceCoreInterface *basic_event_loop_init(void)
     core.watch_update_mask = watch_update_mask;
     core.watch_remove = watch_remove;
     core.channel_event = channel_event;
-    RegisterBlockAndWakeupHandlers(xspice_block_handler, xspice_wakeup_handler, 0);
     return &core;
+}
+
+void xspice_register_handlers(void)
+{
+    RegisterBlockAndWakeupHandlers(xspice_block_handler, xspice_wakeup_handler, 0);
 }

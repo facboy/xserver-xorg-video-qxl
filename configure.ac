@@ -23,7 +23,7 @@
 # Initialize Autoconf
 AC_PREREQ([2.60])
 AC_INIT([xf86-video-qxl],
-        [0.1.0],
+        [0.1.1],
         [https://bugs.freedesktop.org/enter_bug.cgi?product=xorg],
         [xf86-video-qxl])
 AC_CONFIG_SRCDIR([Makefile.am])
@@ -33,6 +33,7 @@ AC_CANONICAL_HOST
 AM_INIT_AUTOMAKE([foreign dist-bzip2])
 AM_MAINTAINER_MODE
 AC_CONFIG_HEADERS([config.h])
+AC_SYS_LARGEFILE
 
 # Require xorg-macros: XORG_DEFAULT_OPTIONS
 m4_ifndef([XORG_MACROS_VERSION],
@@ -62,6 +63,7 @@ XORG_DRIVER_CHECK_EXT(XFreeXDGA, xf86dgaproto)
 # Obtain compiler/linker options for the driver dependencies
 PKG_CHECK_MODULES(XORG, [xorg-server >= 1.0.99.901] xproto fontsproto $REQUIRED_MODULES)
 
+
 save_CFLAGS="$CFLAGS"
 CFLAGS="$XORG_CFLAGS"
 AC_CHECK_DECL(XSERVER_LIBPCIACCESS,
@@ -69,12 +71,43 @@ AC_CHECK_DECL(XSERVER_LIBPCIACCESS,
 	      [#include "xorg-server.h"])
 CFLAGS="$save_CFLAGS"
 
+save_CFLAGS="$CFLAGS"
+CFLAGS="$XORG_CFLAGS"
+AC_CHECK_HEADER(qxl_drm.h,[QXL_DRM=yes],[QXL_DRM=no],[#include <stdint.h>])
+CFLAGS="$save_CFLAGS"
+
+AC_ARG_ENABLE(kms,
+	      AS_HELP_STRING([--disable-kms],
+	                     [Disable KMS support [[default=enabled]]]),
+	     [DRM_MODE="$enableval"],
+	     [DRM_MODE=yes])
+
+# Checks for libraries.
+if test "x$QXL_DRM" = xyes && test "x$DRM_MODE" = xyes; then
+	# require support for kms cursor hotspot
+	PKG_CHECK_MODULES(DRM, [libdrm >= 2.4.46])
+
+else
+	DRM_MODE=no
+fi
+
 if test "x$XSERVER_LIBPCIACCESS" = xyes; then
     PKG_CHECK_MODULES([PCIACCESS], [pciaccess >= 0.10])
 fi
 AM_CONDITIONAL(XSERVER_LIBPCIACCESS, test "x$XSERVER_LIBPCIACCESS" = xyes)
-
-# Checks for libraries.
+save_CFLAGS="$CFLAGS"
+CFLAGS="$DRM_CFLAGS $CFLAGS"
+if test "x$DRM_MODE" = xyes; then
+   	AC_CHECK_HEADER(xf86drmMode.h,[DRM_MODE=yes],[DRM_MODE=no],[#include <stdint.h>
+#include <stdlib.h>])
+	if test "x$DRM_MODE" = xyes; then
+	   	AC_DEFINE(XF86DRM_MODE,1,[DRM kernel modesetting])
+        else
+                DRM_MODE=no
+        fi
+fi
+CFLAGS="$save_CFLAGS"
+AM_CONDITIONAL(DRM_MODE, test x$DRM_MODE = xyes)
 
 enable_qxl=yes
 AC_ARG_ENABLE(xspice,
@@ -105,6 +138,20 @@ fi
 AM_CONDITIONAL(BUILD_XSPICE, test "x$enable_xspice" = "xyes")
 AM_CONDITIONAL(BUILD_QXL, test "x$enable_qxl" = "xyes")
 
+AC_ARG_ENABLE([udev],
+		AS_HELP_STRING([--disable-udev], [Disable libudev support [default=auto]]),
+		[enable_udev="$enableval"],
+		[enable_udev=auto])
+if test "x$enable_udev" != "xno"; then
+	PKG_CHECK_MODULES(LIBUDEV, [libudev], [LIBUDEV=yes], [LIBUDEV=no])
+	if test "x$LIBUDEV" = xyes; then
+		AC_DEFINE(HAVE_LIBUDEV, 1,[libudev support])
+	elif test "x$enable_udev" != "xauto"; then
+		AC_MSG_ERROR([Building with udev requested but libudev not found])
+	fi
+fi
+AM_CONDITIONAL(LIBUDEV, test x$LIBUDEV = xyes)
+
 PKG_CHECK_MODULES([SPICE_PROTOCOL], [spice-protocol >= 0.12.0])
 
 # AC_CHECK_FILE is not supported when cross compiling
@@ -134,6 +181,8 @@ echo "
         prefix:                   ${prefix}
         c compiler:               ${CC}
 
+        drm:                      ${DRM_CFLAGS}
+        KMS:                      ${DRM_MODE}
         Build qxl:                ${enable_qxl}
         Build xspice:             ${enable_xspice}
 "

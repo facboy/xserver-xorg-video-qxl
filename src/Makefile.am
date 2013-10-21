@@ -27,7 +27,7 @@
 
 SUBDIRS=uxa
 
-AM_CFLAGS = $(SPICE_PROTOCOL_CFLAGS) $(XORG_CFLAGS) $(PCIACCESS_CFLAGS) $(CWARNFLAGS)
+AM_CFLAGS = $(SPICE_PROTOCOL_CFLAGS) $(XORG_CFLAGS) $(PCIACCESS_CFLAGS) $(CWARNFLAGS) $(DRM_CFLAGS) @LIBUDEV_CFLAGS@
 
 if BUILD_QXL
 qxl_drv_la_LTLIBRARIES = qxl_drv.la
@@ -35,12 +35,18 @@ qxl_drv_la_LDFLAGS = -module -avoid-version
 qxl_drv_ladir = @moduledir@/drivers
 
 qxl_drv_la_LIBADD = uxa/libuxa.la
+if LIBUDEV
+qxl_drv_la_LIBADD += $(LIBUDEV_LIBS)
+endif
+
 
 qxl_drv_la_SOURCES =				\
 	qxl.h					\
 	qxl_driver.c				\
 	qxl_image.c				\
 	qxl_surface.c				\
+	qxl_surface_ums.c			\
+	qxl_surface.h				\
 	qxl_ring.c				\
 	qxl_mem.c				\
 	mspace.c				\
@@ -50,8 +56,14 @@ qxl_drv_la_SOURCES =				\
 	qxl_cursor.c				\
 	qxl_option_helpers.c		\
 	qxl_option_helpers.h		\
-	qxl_edid.c			\
-	compat-api.h
+	qxl_uxa.c			\
+	qxl_ums_mode.c                  \
+	qxl_io.c                        \
+	dfps.c				\
+	qxl_kms.c			\
+	qxl_drmmode.c			\
+	qxl_drmmode.h			\
+	compat-api.h 
 endif
 
 if BUILD_XSPICE
@@ -61,7 +73,7 @@ spiceqxl_drv_ladir = @moduledir@/drivers
 
 spiceqxl_drv_la_CFLAGS = -DXSPICE $(AM_CFLAGS) $(SPICE_CFLAGS)
 
-spiceqxl_drv_la_LIBADD = uxa/libuxa.la
+spiceqxl_drv_la_LIBADD = uxa/libuxa.la $(XORG_LIBS)
 
 spiceqxl_drv_la_SOURCES =				\
 	qxl.h					\
@@ -77,11 +89,19 @@ spiceqxl_drv_la_SOURCES =				\
 	spiceqxl_main_loop.h		\
 	spiceqxl_display.c			\
 	spiceqxl_display.h			\
+	spiceqxl_vdagent.c			\
+	spiceqxl_vdagent.h			\
+	spiceqxl_uinput.c			\
+	spiceqxl_uinput.h			\
+	spiceqxl_audio.c			\
+	spiceqxl_audio.h			\
 	spiceqxl_inputs.c			\
 	spiceqxl_inputs.h			\
 	qxl_driver.c				\
 	qxl_image.c				\
 	qxl_surface.c				\
+	qxl_surface_ums.c			\
+	qxl_surface.h				\
 	qxl_ring.c				\
 	qxl_mem.c				\
 	mspace.c				\
@@ -89,6 +109,9 @@ spiceqxl_drv_la_SOURCES =				\
 	murmurhash3.c				\
 	murmurhash3.h				\
 	qxl_cursor.c				\
-	qxl_edid.c				\
+	dfps.c				        \
+	qxl_uxa.c                               \
+	qxl_ums_mode.c                     	\
+	qxl_io.c                                \
 	compat-api.h
 endif
