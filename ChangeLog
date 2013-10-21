@@ -1,3 +1,928 @@
+commit b8b67dc138092de488fb6ef62ce4bcb99aaa881a
+Author: Alon Levy <alevy@redhat.com>
+Date:   Sun Oct 20 17:59:07 2013 +0300
+
+    Release 0.1.1
+
+commit 27cb65b1ad669789bebef356ea9086491dbed382
+Author: Alon Levy <alevy@redhat.com>
+Date:   Sun Oct 20 16:33:39 2013 +0300
+
+    xspice: add tests for audio remoting
+    
+    Signed-off-by: Alon Levy <alevy@redhat.com>
+
+commit 7d84ff3a11d61d0619ab3492097b493d08e97ad2
+Author: Alon Levy <alevy@redhat.com>
+Date:   Sun Oct 20 16:32:54 2013 +0300
+
+    Xspice: kill Xorg process on SIGTERM
+    
+    Signed-off-by: Alon Levy <alevy@redhat.com>
+
+commit 715707cf3038447138c5408e6ed91d788c7e37fa
+Author: Alon Levy <alevy@redhat.com>
+Date:   Sun Oct 20 15:36:30 2013 +0300
+
+    qxl_image: fix build break once MIN/MAX switched to spice-protocol
+    
+    In commit 5e122e4ab1ac35186cc610cd0d518cfd5e78d902
+
+commit 48d762993653d1d88da4b93a646bafd844507f26
+Author: Alon Levy <alevy@redhat.com>
+Date:   Sun Oct 13 15:39:43 2013 +0300
+
+    spiceqxl_audio: fix possible buffer overflow (clang)
+    
+    I've tested this. Previously strncat was used incorrectly, it is
+    replaced with snprintf per Uri's suggestion.
+    
+    Signed-off-by: Alon Levy <alevy@redhat.com>
+
+commit 2ed03db1ae39f26b4ba62a7db140a56f9acbe4bc
+Author: Alon Levy <alevy@redhat.com>
+Date:   Wed Oct 16 15:22:26 2013 +0300
+
+    Xspice: add --audio-fifo-dir
+    
+    Signed-off-by: Alon Levy <alevy@redhat.com>
+
+commit a6ce6b285e6f4783b63cc0af309562771b516dfc
+Author: Alon Levy <alevy@redhat.com>
+Date:   Sun Oct 13 15:39:11 2013 +0300
+
+    uxa: use PIXMAN consts instead of PICT in some places (silence clang warning)
+    
+    Signed-off-by: Alon Levy <alevy@redhat.com>
+
+commit 8afb354f094e253585b93108175793fe7bf13606
+Author: Alon Levy <alevy@redhat.com>
+Date:   Sun Oct 13 15:38:35 2013 +0300
+
+    spiceqxl_display: add noreturn attribute (silence clang warning)
+    
+    Signed-off-by: Alon Levy <alevy@redhat.com>
+
+commit 2f7e4c845366328e4f561654e0c38314c7aafe69
+Author: Alon Levy <alevy@redhat.com>
+Date:   Sun Oct 13 15:38:16 2013 +0300
+
+    qxl_get_formats: use surface enum, not bitmap (fixes clang warning)
+    
+    Signed-off-by: Alon Levy <alevy@redhat.com>
+
+commit 70884bd353c34c0be23c2b21eec320cd8c637f4f
+Author: Jeremy White <jwhite@codeweavers.com>
+Date:   Thu Oct 17 14:08:06 2013 -0500
+
+    Use non deprecated functions, removes warnings from build.
+
+commit 5e122e4ab1ac35186cc610cd0d518cfd5e78d902
+Author: Jeremy White <jwhite@codeweavers.com>
+Date:   Thu Oct 17 14:07:29 2013 -0500
+
+    Remove MAX/MIN macros that are now included via spice/macros.h.
+
+commit 78f1115d11bea8be572e6959fa4db0313454b318
+Author: Alon Levy <alevy@redhat.com>
+Date:   Mon Sep 2 17:40:20 2013 +0300
+
+    Xspice: vdagent{,d} launching support
+    
+    It checks for a new enough vdagentd/vdagent via the new -S command line
+    parameter available via "vdagentd -h" and "vdagent -h".
+    
+    Signed-off-by: Alon Levy <alevy@redhat.com>
+
+commit aa9d1cc75d494ae2d33ee2c925a35338ce85f4c2
+Author: Alon Levy <alevy@redhat.com>
+Date:   Mon Sep 2 17:39:51 2013 +0300
+
+    Xspice: require display parameter, and set if earlier in environment
+    
+    Signed-off-by: Alon Levy <alevy@redhat.com>
+
+commit dc451204ec5a4abceac977d99893918091324271
+Author: Alon Levy <alevy@redhat.com>
+Date:   Mon Sep 2 17:39:11 2013 +0300
+
+    Xspice: correct doc string
+    
+    Signed-off-by: Alon Levy <alevy@redhat.com>
+
+commit 9f4e429c13fd6e56a200d58c735b37d7eeb671fe
+Author: Alon Levy <alevy@redhat.com>
+Date:   Mon Sep 2 17:38:45 2013 +0300
+
+    Xspice: use subprocess.Popen, nicer cleanup of files/processes
+    
+    Signed-off-by: Alon Levy <alevy@redhat.com>
+
+commit a6d00dccbf8257c0d225e0886cb2d4a8ba60fe38
+Author: Alon Levy <alevy@redhat.com>
+Date:   Mon Sep 2 17:28:50 2013 +0300
+
+    xspice: add uinput support to vdagent support
+    
+    Signed-off-by: Alon Levy <alevy@redhat.com>
+
+commit 294daff7ea930f338ec6d77ec3465b6f727c168e
+Author: Alon Levy <alevy@redhat.com>
+Date:   Mon Sep 2 17:32:16 2013 +0300
+
+    xspice: add vdagent support
+    
+    Adds a configurable virtio path used to communicate with the vdagentd,
+    and a configuration variable for enabling the thing.
+    
+    With this you can have multiple monitors, but due to usage of a tablet
+    you cannot generate pointer events on and monitors besides the first.
+    
+    clipboard already works.
+    
+    The next patch adds uinput emulation to let vdagentd generate uinput
+    events and fix this glitch.
+    
+    Signed-off-by: Alon Levy <alevy@redhat.com>
+
+commit 9d8a953c8c64cb3d896ad5ae9a534e6a5b71a2f5
+Author: Alon Levy <alevy@redhat.com>
+Date:   Mon Sep 2 17:45:38 2013 +0300
+
+    qxl_option_helpers: add required includes
+    
+    Signed-off-by: Alon Levy <alevy@redhat.com>
+
+commit cfdd8e58df1afd073abf6b0db804f3e10724317d
+Author: Alon Levy <alevy@redhat.com>
+Date:   Mon Sep 2 16:34:41 2013 +0300
+
+    spiceqxl_inputs: expose buttons & position api for agent usage
+    
+    Signed-off-by: Alon Levy <alevy@redhat.com>
+
+commit 9f4c7aed3c75e4214cd16f28b890d6b99f6a2946
+Author: Alon Levy <alevy@redhat.com>
+Date:   Mon Sep 2 16:32:22 2013 +0300
+
+    xspice: zero memory on allocation, fix uninitialized use (valgrind reported)
+    
+    Signed-off-by: Alon Levy <alevy@redhat.com>
+
+commit 9bc5e720f20caf91f95c1fb56bc6ac8c24725eb8
+Author: Alon Levy <alevy@redhat.com>
+Date:   Sun Sep 1 17:43:00 2013 +0300
+
+    xspice: support sending monitors config
+    
+    Signed-off-by: Alon Levy <alevy@redhat.com>
+
+commit 751d51c3a5cb67d9d1e14d9fc43da20b226a99f3
+Author: Alon Levy <alevy@redhat.com>
+Date:   Mon Oct 14 12:26:06 2013 +0300
+
+    fix undefined symbol qxl_enter_vt_kms for XSPICE
+
+commit d38b40046df43810ae79628b5424d7b621307795
+Author: Jeremy White <jwhite@codeweavers.com>
+Date:   Tue Oct 1 14:00:38 2013 -0500
+
+    Handle a missed case where lack of kms doesn't work with XSpice.
+
+commit 14dcb4016ec2f940dbef175b55875f0ac8c14f5c
+Author: Dave Airlie <airlied@redhat.com>
+Date:   Wed Sep 25 08:31:14 2013 +1000
+
+    fix build with --disable-kms
+    
+    Signed-off-by: Dave Airlie <airlied@redhat.com>
+
+commit 86a1751ca6d6b08caa6f060b977f079a4f05b384
+Author: Jeremy White <jwhite@codeweavers.com>
+Date:   Thu May 23 09:23:22 2013 -0500
+
+    Provide compatibility for Xorg list code with Xorg < 1.12, for RHEL 6 support
+
+commit d261a3aef5a5d470057ffd9691af52c214681257
+Author: Alon Levy <alevy@redhat.com>
+Date:   Sun Sep 8 14:51:38 2013 +0300
+
+    fix a bunch of warnings - unused variables, labels, code
+    
+    Signed-off-by: Alon Levy <alevy@redhat.com>
+
+commit abe9cd20186fa810aaf880222d1c9ab3ab6bd379
+Author: Dave Airlie <airlied@redhat.com>
+Date:   Wed Jul 3 15:28:10 2013 +1000
+
+    qxl: fix broken cursor hotspot on KMS driver
+    
+    bugzilla: http://bugzilla.redhat.com/974662
+    
+    Signed-off-by: Dave Airlie <airlied@redhat.com>
+
+commit 96e6be278896ea6ecb43984d7e6fe8eea3b75ab1
+Author: Dave Airlie <airlied@redhat.com>
+Date:   Tue Jul 9 07:33:34 2013 +1000
+
+    qxl: drop GPL code from qxl driver
+    
+    This code was added due to lack of oversight on commits, remove it,
+    
+    this loses this feature for now, a clean implementation using MIT licensed
+    code will be written later.
+    
+    Signed-off-by: Dave Airlie <airlied@redhat.com>
+
+commit 8b03ec16acece636f96cf30362061716f6b596c2
+Author: Cole Robinson <crobinso@redhat.com>
+Date:   Tue Jul 2 16:19:13 2013 -0400
+
+    qxl: Report actual module version
+    
+    https://bugzilla.redhat.com/show_bug.cgi?id=813684
+    
+    Signed-off-by: Cole Robinson <crobinso@redhat.com>
+    Signed-off-by: Dave Airlie <airlied@redhat.com>
+
+commit 131b7a87506adb304be9c479803d6952dce599cd
+Author: Dave Airlie <airlied@redhat.com>
+Date:   Mon Jul 1 13:21:13 2013 +1000
+
+    qxl: add uevent handler support
+    
+    This allows the driver to process uevents from the kernel when the mode
+    changes.
+    
+    Signed-off-by: Dave Airlie <airlied@redhat.com>
+
+commit 9075ac50655b1035275a4b79d6cfdc0de38dcca0
+Author: Alon Levy <alevy@redhat.com>
+Date:   Thu May 30 14:45:27 2013 -0400
+
+    spiceqxl_main_loop: fix use of watch after removal
+    
+    rhbz 968931
+    
+    Signed-off-by: Alon Levy <alevy@redhat.com>
+
+commit 5376ed35a16516bcf97cc13666593d1518231d1f
+Author: Dave Airlie <airlied@redhat.com>
+Date:   Sat Jun 29 21:28:33 2013 +1000
+
+    qxl: fix issue with resizing dev_image improperly
+    
+    this could result in a segfault when resizing.
+    
+    Signed-off-by: Dave Airlie <airlied@redhat.com>
+
+commit a391983e75d62bc1cfc2bab366ba983c2cd0954b
+Author: Dave Airlie <airlied@redhat.com>
+Date:   Tue May 28 13:53:06 2013 +1000
+
+    qxl: fix 32-bit mmaps
+    
+    32-bit mmaps were broken, and I really thought I'd applied this before,
+    but must not have made it across.
+    
+    Signed-off-by: Dave Airlie <airlied@redhat.com>
+
+commit aead20f14a912879a297d77e85d9b029fd5f4e1e
+Author: Dave Airlie <airlied@redhat.com>
+Date:   Thu May 23 05:19:39 2013 +0100
+
+    qxl: don't enable kms unless we can find qxl_drm.h
+    
+    Reported-by: Jeremy White
+    Signed-off-by: Dave Airlie <airlied@redhat.com>
+
+commit 1b4d51be0502224c5b6c165b7aaec02d7e782c8c
+Author: Dave Airlie <airlied@redhat.com>
+Date:   Tue May 14 11:13:00 2013 +1000
+
+    qxl/kms: recreate the host image upon resize
+    
+    The code was just missing this, it was freeing stuff but never
+    reallocating it, oops. This along with the kernel side fix should
+    allow better randr support under KMS.
+    
+    Signed-off-by: Dave Airlie <airlied@redhat.com>
+
+commit 3e37b2c38f661b0b8e285cfa7f0549aa3d216eb5
+Author: Dave Airlie <airlied@redhat.com>
+Date:   Thu May 9 13:43:57 2013 +1000
+
+    qxl: add KMS support v1.2
+    
+    Avoid DRI create busid symbol for now.
+    fix warnings.
+
+commit 77a159451578d0e5773b2af6ed181ad076a6c7a5
+Author: Jeremy White <jwhite@codeweavers.com>
+Date:   Mon Apr 29 14:16:40 2013 -0500
+
+    Set -noreset on invocation
+
+commit 1263b3934c695e124d09a850a4530b17bddcbf51
+Author: Jeremy White <jwhite@codeweavers.com>
+Date:   Mon Apr 29 14:07:03 2013 -0500
+
+    Modify X interfaces to better enable Xorg resets.
+    
+    However, it still crashes, most likely due to the xorg_timer
+    in the watch structure.  Those timers become invalid at Xorg
+    server reset (it clears all timers), but we go on to continue
+    to use them.
+    
+    As fixing this fully will likely require some messy rework,
+    simply documenting -noreset seems like the best choice for now.
+
+commit 11802306622f5580cd211aec175f9fef714e66e4
+Author: Søren Sandmann Pedersen <ssp@redhat.com>
+Date:   Thu Mar 28 08:44:49 2013 -0400
+
+    When DebugRenderFallbacks is turned on, print debug spew in many cases
+    
+    Whenever we can't accelerate, and DebugRenderFallbacks is turned on,
+    print out the reason we couldn't accelerate.
+
+commit 6b5df7bb359b548b65033b16ac539bf3dd91793a
+Author: Søren Sandmann Pedersen <ssp@redhat.com>
+Date:   Thu Mar 28 08:44:48 2013 -0400
+
+    Add new DebugRenderFallbacks option
+    
+    This option defaults to off. When enabled, uxa_set_fallback_debug() is
+    set to true. Later on more debug information may be turned on
+    conditional on this option.
+
+commit 3cbd14b93925c70f32a132082a8eae59380ec4bf
+Author: Jeremy White <jwhite@codeweavers.com>
+Date:   Wed Mar 27 13:28:57 2013 -0500
+
+    Make the Deferred FPS mode available in all cases, not just XSPICE.
+
+commit f6aebb149e4ddffe303f5cfdeb8b24c79416db60
+Author: Jeremy White <jwhite@codeweavers.com>
+Date:   Thu Mar 21 12:58:12 2013 -0500
+
+    Eliminate gcc warning "initialization discards 'const' qualifier from pointer target type"
+
+commit 742a032bcd58534631095dafa89d24c076c43ffe
+Author: Jeremy White <jwhite@codeweavers.com>
+Date:   Sun Sep 9 10:50:19 2012 -0500
+
+    Eliminate a gcc "cast discards '__attribute__((const))'" warning
+
+commit eca99cb6827511a0750e21a09f3f00043966dcc4
+Author: Jeremy White <jwhite@codeweavers.com>
+Date:   Thu Mar 21 10:44:46 2013 -0500
+
+    Actually request the forcibly inline functions to be inline.
+    
+    Silences a gcc warning (-Wattributes).
+
+commit 48170807029bf0a13f60b2d89047474b05168c84
+Author: Jeremy White <jwhite@codeweavers.com>
+Date:   Sun Sep 9 11:14:14 2012 -0500
+
+    Eliminate a printf format warning on 32 bit systems.
+
+commit 8f8f600719cae19b2bc3c5afa7dfd7f4d1c3ac19
+Author: Jeremy White <jwhite@codeweavers.com>
+Date:   Sun Sep 9 15:27:14 2012 -0500
+
+    Document a meaningful warning.
+
+commit 60e1dc6fb66c23b3bfb8511073866a468a73a599
+Author: Jeremy White <jwhite@codeweavers.com>
+Date:   Thu Mar 21 10:33:01 2013 -0500
+
+    Removed unused local variables
+
+commit 274a08685b3bf709cd08a74c082f1253ee46d43a
+Author: Jeremy White <jwhite@codeweavers.com>
+Date:   Sun Sep 9 10:34:52 2012 -0500
+
+    Eliminate gcc warning on duplicate use of ARRAY_SIZE by Xorg.
+
+commit 42c88ddaccd3a286c6637aa82248e5eb1cc75006
+Author: Jeremy White <jwhite@codeweavers.com>
+Date:   Wed Mar 20 15:00:15 2013 -0500
+
+    More correctly signal that we only want the first head connected at start.
+    
+    This prevents a bug when using old versions of qemu (< 1.2) and the latest
+    driver version.
+    
+    This was uncovered when I found that my patch beccf8e8:
+      Establish a preferred default of 1024x768 correctly.
+    causes a failure when running with the qemu in Debian.
+    
+    The video ram allocated by older qemu versions (8M) is not enough to hold the
+    default heads (4) times the default screen size (1024x768).
+    
+    It worked prior to my patch because the previous code was a bit of a mess.
+    It would hard code 1024x768 for Virtual Size, hack some crtcs to disabled,
+    and sorta kinda have 4 heads connected. Later resizes would come through and
+    mostly fix things up, so we largely got away with.
+    
+    This change should correctly signal that we start with only one head
+    connected.
+    
+    There is still more that could be done with the randr code; we have
+    unimplemented functions that I suspect would allow us to fail more
+    graciously when the user tries to create displays in excess of our RAM.
+
+commit 475f3b73345dd0bc480f0761e41a35e7ce0c80b8
+Author: Jeremy White <jwhite@codeweavers.com>
+Date:   Tue Mar 19 08:47:32 2013 -0500
+
+    Add an example stanza for the FIFO dir logic.
+
+commit 9f18384a9b34da4eed3690f11575b6633c61f1a0
+Author: Andrew Eikum <aeikum@codeweavers.com>
+Date:   Fri Mar 15 09:19:49 2013 -0500
+
+    Implement sending audio to the client from a directory of FIFO queues
+    
+    This introduces a new Xorg.conf option, SpicePlaybackFIFODir, which will
+    be monitored for files. The XSpice driver will mix and forward the audio
+    data sent to those pipes to the Spice client.
+    
+    This is designed to work with PulseAudio's module-pipe-sink, but should
+    work with any audio output to a pipe. For example, use with this PA
+    configuration option:
+    
+      load-module module-pipe-sink file=$FIFO_DIR/playback.fifo format=s16 rate=44100 channels=2
+    
+    making sure the format, rate, and channels match the Spice protocol
+    settings.
+
+commit 56623b13a860a9b76ca59d5e9e7d14c80d72d245
+Author: Jeremy White <jwhite@codeweavers.com>
+Date:   Thu Mar 14 12:47:13 2013 -0500
+
+    Add a --xsession option, to allow for an automatic start of an xsession script
+
+commit d540f7e91e39db6eec752e698252b6efb83ed950
+Author: Jeremy White <jwhite@codeweavers.com>
+Date:   Thu Mar 14 11:30:39 2013 -0500
+
+    Enable the deferred-fps and exit-on-disconnect options
+
+commit 6d480421cd307e4cce91e6f6da85890715c8d676
+Author: Jeremy White <jwhite@codeweavers.com>
+Date:   Thu Mar 14 10:50:44 2013 -0500
+
+    Add a '--auto' flag to create a temporary xorg.conf file.
+
+commit 7038ec9eb6bdff60623f38462376acb2de1e2272
+Author: Jeremy White <jwhite@codeweavers.com>
+Date:   Thu Mar 14 10:20:03 2013 -0500
+
+    Consolidate and document the missing parameters
+
+commit 60d9b28cc02e2560b7a96826be5283df6014fb14
+Author: Jeremy White <jwhite@codeweavers.com>
+Date:   Wed Mar 13 14:43:09 2013 -0500
+
+    Add missing options to the example xorg.conf file.
+    
+    Poor man's documentation for the win!
+
+commit 45a862ef5c75a913628155ed65344ad4f3bc94a0
+Author: Jeremy White <jwhite@codeweavers.com>
+Date:   Wed Mar 13 14:25:45 2013 -0500
+
+    Handle cache and surface options the same way we handle all options.
+    
+    Add comment lines for them to the example xorg.conf file.
+
+commit cee2fe80480db851402186096f8fc433306d330e
+Author: Jeremy White <jwhite@codeweavers.com>
+Date:   Wed Mar 6 12:30:36 2013 -0600
+
+    Initialize our update region at surface creation, avoids 0 size regions
+
+commit c36be89ea4f5bbfb81bc2eee4af130d2e9553e7e
+Author: Jeremy White <jwhite@codeweavers.com>
+Date:   Wed Mar 6 12:30:01 2013 -0600
+
+    We're uploading a drawable from the primary surface, use it.
+
+commit 7a7b12762904eea329f678987565d89db56421b6
+Author: Dave Airlie <airlied@redhat.com>
+Date:   Tue Mar 12 10:27:19 2013 +1000
+
+    qxl: drop pointless and wrong memset.
+    
+    Signed-off-by: Dave Airlie <airlied@redhat.com>
+
+commit a474a718e118895978beb19d77d730f578c201ef
+Author: Dave Airlie <airlied@gmail.com>
+Date:   Wed Mar 6 13:54:22 2013 +1000
+
+    qxl: use u64_to_pointer to avoid warnings when building on i686
+    
+    Signed-off-by: Dave Airlie <airlied@redhat.com>
+
+commit 5d73de5e250350e10d0dc8b000ce1d3a21eeb2b5
+Author: Dave Airlie <airlied@gmail.com>
+Date:   Wed Mar 6 13:33:50 2013 +1000
+
+    qxl: fix xspice build due to missing include.
+    
+    Signed-off-by: Dave Airlie <airlied@redhat.com>
+
+commit 6400c31454483aa2a8edd828579d9a2e7190df1c
+Author: Dave Airlie <airlied@gmail.com>
+Date:   Wed Mar 6 13:31:30 2013 +1000
+
+    qxl: fix build in koji
+    
+    Signed-off-by: Dave Airlie <airlied@redhat.com>
+
+commit 9d45cc50c0f7302a649a5ae5b850f0bdbb9a2771
+Author: Dave Airlie <airlied@gmail.com>
+Date:   Tue Feb 26 15:03:37 2013 +1000
+
+    qxl: separate surface ums code out into separate file
+    
+    All the surface cache code is UMS specific, so separate most of it out.
+    
+    Signed-off-by: Dave Airlie <airlied@redhat.com>
+
+commit 8c7fada8f42cc4a741f7f1d210b50f754ef8805e
+Author: Dave Airlie <airlied@gmail.com>
+Date:   Tue Feb 26 14:03:40 2013 +1000
+
+    qxl: abstract object allocation away from surface/image/cursor code
+    
+    This abstracts the object bo/surface allocation away from the user code.
+    
+    The idea is we can then plug in a KMS backend for this abstraction and mostly
+    keep the surrounding code intact.
+    
+    This is probably the biggest change to the driver in terms of impact of KMS
+    code on UMS code. At the moment I'm storing linked list of bos for release
+    handling, and that might be better done with a different data structure,
+    since we are looking them up by phy_addr, either a hash table or some sort
+    of rb tree perhaps, rather than a linear search.
+    
+    This commit also starts usign the xorg list macros, which may require
+    some compat code to work in history.
+    
+    Signed-off-by: Dave Airlie <airlied@redhat.com>
+
+commit f0e9d7bb9658a89909f97b485437a1375aa0267f
+Author: Dave Airlie <airlied@gmail.com>
+Date:   Tue Feb 26 13:23:47 2013 +1000
+
+    qxl: add direct pointer from qxl surface to qxl screen
+    
+    This is prep work to allow the cache to be bypassed for kms.
+    
+    Signed-off-by: Dave Airlie <airlied@redhat.com>
+
+commit edea5bed01049ae9f62278fe998b13745c8ffa8c
+Author: Dave Airlie <airlied@gmail.com>
+Date:   Tue Feb 26 13:11:08 2013 +1000
+
+    qxl: pass surface struct instead of ids in drawable functions.
+    
+    this just changes it so we pass the surfaces not just the ids.
+    
+    Signed-off-by: Dave Airlie <airlied@redhat.com>
+
+commit 8b27ab5b956a0e4ca1dd14f26634d0159d0976dc
+Author: Dave Airlie <airlied@gmail.com>
+Date:   Tue Feb 26 13:07:39 2013 +1000
+
+    qxl_edid: add missing config.h
+    
+    Signed-off-by: Dave Airlie <airlied@redhat.com>
+
+commit 37bc463a553c03ea9a757ad2ebea056b42c6e8ad
+Author: Dave Airlie <airlied@gmail.com>
+Date:   Tue Feb 26 13:04:20 2013 +1000
+
+    qxl: split common pre init code out from qxl pre init
+    
+    This just moves the options parsing and color setup calls
+    to a separate function.
+    
+    Signed-off-by: Dave Airlie <airlied@redhat.com>
+
+commit 9a1914cff1200a58dab1edb939292f0fb96ec025
+Author: Dave Airlie <airlied@gmail.com>
+Date:   Tue Feb 26 12:49:53 2013 +1000
+
+    qxl: fix memory leak on driver exit.
+    
+    We were leaking two allocations on driver exit.
+    
+    Signed-off-by: Dave Airlie <airlied@redhat.com>
+
+commit e24b9ca438c17797012a48f9647682d382e44de0
+Author: Dave Airlie <airlied@gmail.com>
+Date:   Tue Feb 26 12:48:36 2013 +1000
+
+    qxl_surface: move to using struct to avoid ordering issues with typedef.
+    
+    Signed-off-by: Dave Airlie <airlied@redhat.com>
+
+commit 39b5c10ac426db8377389433d4d04f54c8b710ef
+Author: Dave Airlie <airlied@gmail.com>
+Date:   Tue Feb 26 12:47:33 2013 +1000
+
+    qxl: pass qxl instead of surface cache to some functions
+    
+    This is more preparation work for adding bo abstraction layer.
+    
+    Signed-off-by: Dave Airlie <airlied@redhat.com>
+
+commit b13a5e7cfead7d4de4d24d86f0eabeae76934fb9
+Author: Dave Airlie <airlied@gmail.com>
+Date:   Tue Feb 26 12:26:45 2013 +1000
+
+    qxl: split surface struct out into its own header file.
+    
+    This is just ground work for kms addition.
+    
+    Signed-off-by: Dave Airlie <airlied@redhat.com>
+
+commit 2753e5bf4cc6cdfaea50785cc70285a1bb995fcf
+Author: Dave Airlie <airlied@gmail.com>
+Date:   Tue Nov 20 12:43:27 2012 +1000
+
+    uxa: port over tiled fill code from EXA
+    
+    This makes X -retro actually render fast, as opposed to glacially slow.
+    
+    Signed-off-by: Dave Airlie <airlied@redhat.com>
+
+commit 3dfb0a968d572e8af2bc52c964beeaaab4675448
+Author: Dave Airlie <airlied@gmail.com>
+Date:   Tue Nov 13 14:43:45 2012 +1000
+
+    qxl: move mspace setup to qxl_mem.c
+    
+    removes mspace stuff from main qxl_driver.c
+    
+    Signed-off-by: Dave Airlie <airlied@redhat.com>
+
+commit 55c0b36c54fe6dfb25cdbcfad0add9707c4a734b
+Author: Dave Airlie <airlied@gmail.com>
+Date:   Tue Nov 13 14:40:53 2012 +1000
+
+    qxl: move garbage collector + alloc into qxl_mem.c
+    
+    This moves a lot more code out of the qxl_driver.c file.
+    
+    Signed-off-by: Dave Airlie <airlied@redhat.com>
+
+commit a604a002fda045c8166333d4f17925280844d26d
+Author: Dave Airlie <airlied@gmail.com>
+Date:   Tue Nov 13 14:36:58 2012 +1000
+
+    qxl: move mem slots code to qxl_mem.c
+    
+    This moves the mem slot setup code to qxl_mem.c.
+    
+    Signed-off-by: Dave Airlie <airlied@redhat.com>
+
+commit 338cfb89bb3f1e3ae4cbfdbf4c9640dde9707f5d
+Author: Dave Airlie <airlied@gmail.com>
+Date:   Tue Nov 13 14:35:05 2012 +1000
+
+    qxl_mem: drop unused if 0 code.
+    
+    Doesn't look we want this code anymore, so drop it.
+    
+    Signed-off-by: Dave Airlie <airlied@redhat.com>
+
+commit 120ca968123e5c1e9d355bc43826a92fdfdf7f2c
+Author: Dave Airlie <airlied@gmail.com>
+Date:   Tue Nov 13 14:33:39 2012 +1000
+
+    qxl: move io functions to a separate file
+    
+    this moves all the lowlevel ioport interaction code to a separate file.
+    
+    Signed-off-by: Dave Airlie <airlied@redhat.com>
+
+commit 43ff8209da8ca3770339bbc9b776e114b94a55a7
+Author: Dave Airlie <airlied@gmail.com>
+Date:   Tue Nov 13 14:20:10 2012 +1000
+
+    qxl: split user modesetting code and crtc code out.
+    
+    This splits the UMS modesetting and xf86Crtc code out into a separate file.
+    
+    Signed-off-by: Dave Airlie <airlied@redhat.com>
+
+commit 5f8e250927ebaf8a76621efb9294e527a7bde99b
+Author: Dave Airlie <airlied@gmail.com>
+Date:   Tue Nov 13 14:04:17 2012 +1000
+
+    qxl: split uxa related code into separate file
+    
+    qxl_driver.c is insane, it needs to be split out like other X.org drivers.
+    
+    This is step one, move the uxa interfacing code into its own file.
+    
+    Signed-off-by: Dave Airlie <airlied@redhat.com>
+
+commit beccf8e81ea6bb4c86bcaf3cd4aac5e18f6d3f0d
+Author: Jeremy White <jwhite@codeweavers.com>
+Date:   Tue Jan 29 13:34:52 2013 -0600
+
+    Establish a preferred default of 1024x768 correctly.
+    
+    This fixes a bug with x-spice where you could not specify
+    a default mode in an xorg.conf modeline that was greater
+    than 1024x768.  This also eliminates (and partially
+    reverts) patch c1b537fc.
+    
+    It also fixes bug 894421, where gnome modes flicker
+    and work poorly.
+
+commit c90bb813f3d30c8c800b1f56d77713cce417f1b2
+Author: Uri Lublin <uril@redhat.com>
+Date:   Thu Jan 17 16:26:35 2013 +0200
+
+    qxl_driver: monitors_config: adjust to memory-remap
+    
+    Resolves: rhbz#883578
+    
+    Call qxl_allocate_monitors_config upon memory-remap such
+    that qxl->monitors_config points to the start of
+    monitors_config segment in qxl RAM memory.
+    
+    Currently after memory remap, it's possible that monitors_config
+    memory and video-memory (or graphics) overlap, which means
+    that one may overwrite another.
+    Specifically in the bug above, monitors_config value are being
+    overwritten by video pages, and on the destination bad values
+    are read which cause problems on the server and client.
+    
+    It may be a good idea to add some protection on the server side,
+    e.g. calcluate checksum, compare values against modes, or limit
+    ->count and ->max_allowed and ignore bad monitors_config values
+    
+    Also do not memset-0 monitors-config upon allocation (remapping)
+    to not overwrite likely good configuration (in case it is
+    being read by the host, e.g. upon migration).
+
+commit dadc1ad3f05633f926c9cb75a93367c5d52af988
+Author: Uri Lublin <uril@redhat.com>
+Date:   Thu Jan 17 16:26:34 2013 +0200
+
+    qxl_driver: simplify calling qxl_update_monitors_config
+    
+    Simplify by calling check_crtc from within qxl_update_monitors_config,
+    instead of calling check_crtc before every call to
+    qxl_update_monitors_config.
+
+commit 3963ad1a140ef4b2a3f09471d0135311b9b36c87
+Author: Uri Lublin <uril@redhat.com>
+Date:   Thu Jan 17 16:26:33 2013 +0200
+
+    qxl_driver: check_crtc: handle qxl->crtcs == NULL
+
+commit 1d5001116662ef832e010a098a68b81446c1c531
+Author: Uri Lublin <uril@redhat.com>
+Date:   Thu Jan 17 16:26:32 2013 +0200
+
+    qxl_pre_init: fix calculation of available video memory
+    
+    Don't forget to substract monitors_config area.
+    
+    Memory map of qxl RAM looks something like the following:
+    ---------------------
+    |                   |
+    | Surface0 Area     |
+    |                   |
+    ---------------------
+    |                   |
+    |                   |
+    | Video Pages       |
+    |                   |
+    |                   |
+    ---------------------
+    | Monitors Config   |
+    ---------------------
+    | RAM Header        |
+    ---------------------
+
+commit 2e003fc6447128ca1035061a3f98fd57ee3bed24
+Author: Uri Lublin <uril@redhat.com>
+Date:   Thu Jan 17 16:26:31 2013 +0200
+
+    qxl_driver: remove unused enum ROPDescriptor
+
+commit 4908d6c4d13014f38dadfd1020cd680e81f053b7
+Author: Jeremy White <jwhite@codeweavers.com>
+Date:   Thu Sep 6 16:01:15 2012 -0500
+
+    Enable the use of SpiceExitOnDisconnect so that Xspice can be configured
+    to allow exactly one server per client session.
+
+commit 6677781531a8638c3813ee091881271d7d7e23b2
+Author: Jeremy White <jwhite@codeweavers.com>
+Date:   Thu Sep 20 16:04:08 2012 -0500
+
+    Implement prepare_copy using GC functions.
+    
+    This avoids having to screen out bad alu and planemasks;
+    we let the X driver take care of it.
+
+commit 6130831c7341acee332e1c0dd7d3b74350e87fcc
+Author: Jeremy White <jwhite@codeweavers.com>
+Date:   Thu Sep 20 15:52:31 2012 -0500
+
+    Implement copy with fbFill.
+    
+    This fixes issues with 1 bit images; some pixman implementations
+    did not support 1 bit images - the general fbFill implementation
+    takes care of it for us.
+
+commit 531a844ab9136d657f90a30bb049068e92629c65
+Author: Jeremy White <jwhite@codeweavers.com>
+Date:   Tue Sep 11 12:56:19 2012 -0500
+
+    Add a deferred frames mode.
+    
+    This renders all operations to a frame buffer,
+    and sends updates periodically.
+
+commit 4301bff52bfec982b16896e395d9b4785c359a73
+Author: Jeremy White <jwhite@codeweavers.com>
+Date:   Mon Sep 10 12:29:29 2012 -0500
+
+    Shift the uxa function initialization to a separate function.
+
+commit 7d62dcc6d400e3f96fb7921fbdb852f3b9024b17
+Author: Jeremy White <jwhite@codeweavers.com>
+Date:   Mon Sep 10 10:36:39 2012 -0500
+
+    Add a DeferredFPS option.
+
+commit a44be4fd011cc0b80d0c8109589e7aa1c26cad1e
+Author: Jeremy White <jwhite@codeweavers.com>
+Date:   Thu Sep 13 09:53:03 2012 -0500
+
+    Unify memory management for the primary screen.
+    
+    We never actually connected the host_image pixmap to
+    the primary screen, because we never operate on the bits
+    of the primary screen.
+    
+    This causes problems if we wish to use traditional X
+    operations to modify the primary screen, as they will
+    fail and corrupt memory as they go.
+
+commit 819b1f62efbecf33db7bb0b4402a798262ae4574
+Author: Adam Jackson <ajax@redhat.com>
+Date:   Wed Jan 9 22:55:47 2013 -0500
+
+    Remove mibstore.h
+    
+    Signed-off-by: Adam Jackson <ajax@redhat.com>
+
+commit b211ff37e1fdca853275e73e5cd089c0d713f521
+Author: Yaakov Selkowitz <yselkowitz@users.sourceforge.net>
+Date:   Fri Sep 28 14:06:07 2012 -0500
+
+    Only include Xv headers if server supports it
+    
+    Signed-off-by: Yaakov Selkowitz <yselkowitz@users.sourceforge.net>
+    Reviewed-by: Søren Sandmann Pedersen <ssp@redhat.com>
+
+commit 29ac84b5009ba83345200c1ca4511c2c86331624
+Author: Yaakov Selkowitz <yselkowitz@users.sourceforge.net>
+Date:   Fri Sep 28 13:35:33 2012 -0500
+
+    Add XORG_LIBS to LIBADD
+    
+    This affects only Cygwin (on which only spiceqxl is supported), where
+    drivers must be linked against the Xorg implib.  On other systems,
+    XORG_LIBS will be empty.
+    
+    Signed-off-by: Yaakov Selkowitz <yselkowitz@users.sourceforge.net>
+    Reviewed-by: Søren Sandmann Pedersen <ssp@redhat.com>
+
+commit 10d6e8ee3e59655c32c2d518cc6686eff902c6dc
+Author: Jeremy White <jwhite@codeweavers.com>
+Date:   Wed Aug 8 14:58:36 2012 -0500
+
+    Change include paths to fix rare compilation issue.
+    
+    Technically, the xorg/ prefix should not be specified.  It generally works,
+    because xorg/ is usually hung off /usr/include.  This enables
+    compliation that correctly respects a pkg-config --cflags xorg-server.
+
 commit d8bb331784792bfd35bf158875b434243f0fe019
 Author: Søren Sandmann Pedersen <ssp@redhat.com>
 Date:   Thu Sep 20 19:11:55 2012 -0400
