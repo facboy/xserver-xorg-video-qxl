@@ -1,2 +1,2 @@
-diff-ignore = autogen.sh|.git|TODO.xspice|ChangeLog|Makefile.in|aclocal.m4|config.guess|config.h.in|config.sub|configure|depcomp|install-sh|ltmain.sh|missing
+diff-ignore = autogen.sh|.git|TODO.xspice|ChangeLog|Makefile.in|aclocal.m4|config.guess|config.h.in|config.sub|configure|depcomp|install-sh|ltmain.sh|missing|tests
 

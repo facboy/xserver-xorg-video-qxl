@@ -1,8 +1,12 @@
-xserver-xorg-video-qxl (0.1.1-1) UNRELEASED; urgency=low
+xserver-xorg-video-qxl (0.1.1-1) unstable; urgency=low
 
+  [Michele Cane]
   * New upstream release.
 
- -- Michele Cane <michele.cane@gmail.com>  Mon, 21 Oct 2013 22:07:36 +0200
+  [Liang Guo]
+  * Ignore tests in debian/source/options
+
+ -- Liang Guo <guoliang@debian.org>  Thu, 24 Oct 2013 09:49:08 +0800
 
 xserver-xorg-video-qxl (0.1.0-2) unstable; urgency=low
 
