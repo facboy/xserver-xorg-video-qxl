@@ -1,5 +1,8 @@
 #!/usr/bin/make -f
 
+override_dh_auto_build:
+	dh_auto_build -- V=1
+
 .PHONY: override_dh_strip
 override_dh_strip:
 	dh_strip --dbg-package=xserver-xorg-video-qxl-dbg
