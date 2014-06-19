@@ -1,6 +1,7 @@
 xserver-xorg-video-qxl (0.1.1-2) UNRELEASED; urgency=medium
 
   * Remove Liang Guo and Cyril Brulebois from Uploaders.
+  * Back to source format 1.0.
 
  -- Julien Cristau <jcristau@debian.org>  Thu, 19 Jun 2014 21:09:28 +0200
 
