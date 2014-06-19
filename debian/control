@@ -20,8 +20,6 @@ Build-Depends:
  xutils-dev (>= 1:7.5),
  quilt (>= 0.46-7~),
  libspice-protocol-dev (>= 0.12.2~),
- libspice-server-dev [amd64 i386],
- python,
 Standards-Version: 3.9.4
 Homepage: http://spice-space.org/
 Vcs-Git: git://git.debian.org/git/pkg-xorg/driver/xserver-xorg-video-qxl
@@ -52,17 +50,3 @@ Description: X.Org X server -- QXL display driver (debugging symbols)
  other SPICE-compatible KVM/Qemu emulator. 
  .
  This package contains the debugging symbols for this driver.
-
-Package: xserver-xspice
-Architecture: amd64
-Depends: ${shlibs:Depends}, ${misc:Depends}, ${python:Depends}, xserver-xorg, xserver-xorg-video-qxl (>= 0.0.17-2), python-argparse
-Description: Xspice X server
- Xspice is an X server and Spice server in one. It consists of a wrapper script
- for executing Xorg with the right parameters and environment variables, a
- module names spiceqxl_drv.so implementing three drivers: a video mostly
- code identical to the guest qxl X driver, and keyboard and mouse reading from
- the spice inputs channel.
- .
- Xspice allows regular X connections, while a spice client provides the keyboard
- and mouse and video output.
-
